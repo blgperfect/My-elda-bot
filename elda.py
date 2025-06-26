@@ -31,11 +31,13 @@ class EldaBot(commands.Bot):
         intents.members = True
         intents.message_content = True
 
+        # on crée le bot en passant directement le custom status
         super().__init__(
             command_prefix="!",
             intents=intents,
             owner_id=OWNER_ID,
             help_command=None,
+            activity=discord.CustomActivity(STATUS_MESSAGE),
         )
 
         self.loaded_ext: list[str] = []
@@ -61,14 +63,13 @@ class EldaBot(commands.Bot):
                     logger.exception(f"Failed to load extension {module}: {e}")
                     self.failed_ext.append(module)
 
-        # Synchronise toutes les commandes slash
+        # Synchronise toutes les commandes slash avec Discord
         await self.tree.sync()
 
     async def on_ready(self):
-        # Affichage de base
+        # Affichage de connexion
         console.print(f"✅ Bot connecté en tant que {self.user}")
-        await self.change_presence(activity=discord.Game(STATUS_MESSAGE))
-        console.print(f"✨ Statut défini sur « {STATUS_MESSAGE} »")
+        console.print(f"✨ Statut personnalisé : « {STATUS_MESSAGE} »")
 
         # Séparation des modules commands vs tasks
         cmds = [m for m in self.loaded_ext if m.startswith("commands.")]
@@ -84,16 +85,16 @@ class EldaBot(commands.Bot):
 
         # Comptage des commandes utilisateur
         console.print(
-            f"📜 {len(self.commands)} préfixe command(s), "
+            f"📜 {len(self.commands)} text command(s), "
             f"{len(self.tree.get_commands())} slash command(s)."
         )
 
 
-# ─── Connexion à MongoDB ────────────────────────────────────────────────────
+# ─── Connexion à MongoDB ───────────────────────────────────────────────────
 mongo_client = AsyncIOMotorClient(MONGO_URI)
 db = mongo_client[DATABASE_NAME]
 
-# ─── Démarrage du Bot ───────────────────────────────────────────────────────
+# ─── Point d’entrée ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     bot = EldaBot()
     bot.run(DISCORD_TOKEN)
