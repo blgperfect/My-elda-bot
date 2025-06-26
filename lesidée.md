@@ -5,3 +5,12 @@ je veux.
 apres sa dit : Nom du bot est connecté avec un emoj coeur a la fin.
 
 2. Je t'ai mis des information dans mon fichier que j'ai appellé params.py ce sont mes parametre par défaut que je veux réutulisé sur le bot et dans le code sans avoir a me répété. toi tu doit juste les placé de m'anniere claire & que apres ce soit facile d'allez chercher ses valeur la apres.
+
+
+
+mes fichier actuelle a moi & dossier sont
+
+dossier config : fichier params.py
+dossier commands : aini que plusieurs sous dossier : admin , mod, user etc etc 
+elda.py
+.env
