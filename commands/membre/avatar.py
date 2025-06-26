@@ -6,29 +6,42 @@ from config.params import EMBED_COLOR, EMBED_FOOTER_TEXT, EMBED_FOOTER_ICON_URL,
 
 class AvatarView(discord.ui.View):
     def __init__(self, embeds: list[discord.Embed]):
-        super().__init__(timeout=60)  # active 60s
+        super().__init__(timeout=60)  # 60s avant expiration
         self.embeds = embeds
         self.index = 0
-        # Ajoute le bouton uniquement si plusieurs pages
+        # si plus d’une page, on ajoute le bouton
         if len(embeds) > 1:
-            self.add_item(self.NextButton())
+            self.next_button = self.NextButton()
+            self.add_item(self.next_button)
 
     class NextButton(discord.ui.Button):
         def __init__(self):
-            super().__init__(style=discord.ButtonStyle.secondary, emoji=EMOJIS.get("ARROW", "➡️"))
+            super().__init__(
+                style=discord.ButtonStyle.secondary,
+                emoji=EMOJIS.get("ARROW", "➡️"),
+                disabled=False,
+            )
 
         async def callback(self, interaction: discord.Interaction):
             view: AvatarView = self.view  # type: ignore
             view.index = (view.index + 1) % len(view.embeds)
             embed = view.embeds[view.index]
-            # Met à jour le bouton (flèche gauche/droite selon page)
+            # bascule l'emoji
             if view.index == 0:
-                # Retour à la première page : garde flèche droite
                 self.emoji = EMOJIS.get("ARROW", "➡️")
             else:
-                # Page suivante (index=1) : bouton retour
                 self.emoji = EMOJIS.get("BACK", "⬅️")
             await interaction.response.edit_message(embed=embed, view=view)
+
+    async def on_timeout(self):
+        # désactive tous les boutons à l'expiration
+        for item in self.children:
+            item.disabled = True
+        # édite le message pour refléter la désactivation
+        try:
+            await self.message.edit(view=self)  # type: ignore
+        except Exception:
+            pass  # si échec, on ignore
 
 class Avatar(commands.Cog):
     """Commande slash /avatar pour afficher l'avatar d'un membre."""
@@ -38,7 +51,7 @@ class Avatar(commands.Cog):
 
     @app_commands.command(
         name="avatar",
-        description="Affiche l'avatar d'un membre (serveur & global si présents)."
+        description="Affiche l'avatar d'un membre (serveur & global si disponibles)."
     )
     @app_commands.describe(member="Le membre dont vous voulez voir l'avatar")
     async def avatar(
@@ -48,16 +61,24 @@ class Avatar(commands.Cog):
     ):
         target = member or interaction.user
 
-        # Récupère les URLs
-        global_url = target.avatar.url if target.avatar else None
+        # Récupère avatars
+        global_url = getattr(target, "avatar", None)
+        global_url = global_url.url if global_url else None
+
         server_url = getattr(target, "guild_avatar", None)
         server_url = server_url.url if server_url else None
 
-        # Crée les embeds disponibles
-        embeds: list[discord.Embed] = []
-        title = f"Avatar de {target.mention}"
+        # si pas d’avatar du tout
+        if not global_url and not server_url:
+            return await interaction.response.send_message(
+                f"{EMOJIS.get('WARNING', '⚠️')} Impossible de récupérer l'avatar de {target.mention}.",
+                ephemeral=True
+            )
 
-        # Embed du server avatar si présent
+        # titre
+        title = f"Avatar de {target.mention}"
+        embeds: list[discord.Embed] = []
+
         if server_url:
             e = discord.Embed(
                 title=title,
@@ -68,7 +89,6 @@ class Avatar(commands.Cog):
             e.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
             embeds.append(e)
 
-        # Embed de l'avatar global si présent
         if global_url:
             e = discord.Embed(
                 title=title,
@@ -79,16 +99,11 @@ class Avatar(commands.Cog):
             e.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
             embeds.append(e)
 
-        # Si au moins un embed
-        if embeds:
-            view = AvatarView(embeds)
-            await interaction.response.send_message(embed=embeds[0], view=view)
-        else:
-            # Cas improbable : pas d'avatar du tout
-            await interaction.response.send_message(
-                f"{EMOJIS.get('WARNING', '⚠️')} Impossible de trouver un avatar pour {target.mention}.",
-                ephemeral=True
-            )
+        # envoi
+        view = AvatarView(embeds)
+        await interaction.response.send_message(embed=embeds[0], view=view)
+        # on récupère le message pour pouvoir éditer à l'expiration
+        view.message = await interaction.original_response()
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Avatar(bot))
