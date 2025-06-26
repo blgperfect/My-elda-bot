@@ -47,7 +47,7 @@ class EldaBot(commands.Bot):
         """Charge récursivement les extensions et synchronise les slash commands."""
         base = Path(__file__).parent
 
-        for pkg in ("commands", "tasks"):
+        for pkg in ("commands", "task"):
             folder = base / pkg
             for file in folder.rglob("*.py"):
                 if file.name.startswith("_") or file.name == "__init__.py":
@@ -71,11 +71,11 @@ class EldaBot(commands.Bot):
         console.print(f"✅ Bot connecté en tant que {self.user}")
         console.print(f"✨ Statut personnalisé : « {STATUS_MESSAGE} »")
 
-        # Séparation des modules commands vs tasks
+        # Séparation des modules commands vs task
         cmds = [m for m in self.loaded_ext if m.startswith("commands.")]
-        tasks = [m for m in self.loaded_ext if m.startswith("tasks.")]
+        task = [m for m in self.loaded_ext if m.startswith("task.")]
 
-        console.print(f"🛠️ {len(tasks)} module(s) de tâches chargé(s).")
+        console.print(f"🛠️ {len(task)} module(s) de tâches chargé(s).")
         console.print(f"⚙️ {len(cmds)} module(s) de commandes chargé(s).")
         if self.failed_ext:
             console.print(
