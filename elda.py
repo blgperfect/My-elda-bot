@@ -48,12 +48,10 @@ class EldaBot(commands.Bot):
         for pkg in ("commands", "tasks"):
             folder = base / pkg
             for file in folder.rglob("*.py"):
-                # on ignore les __init__.py et les fichiers commençant par _
                 if file.name.startswith("_") or file.name == "__init__.py":
                     continue
 
-                # ex: commands/admin/mod.py -> commands.admin.mod
-                rel = file.relative_to(base).with_suffix("")  # ex: commands/admin/mod
+                rel = file.relative_to(base).with_suffix("")
                 module = ".".join(rel.parts)
 
                 try:
@@ -67,20 +65,26 @@ class EldaBot(commands.Bot):
         await self.tree.sync()
 
     async def on_ready(self):
-        # Affichage épuré
+        # Affichage de base
         console.print(f"✅ Bot connecté en tant que {self.user}")
         await self.change_presence(activity=discord.Game(STATUS_MESSAGE))
         console.print(f"✨ Statut défini sur « {STATUS_MESSAGE} »")
 
-        # Résumé du chargement
-        console.print(f"🔧 {len(self.loaded_ext)} extension(s) chargée(s).")
+        # Séparation des modules commands vs tasks
+        cmds = [m for m in self.loaded_ext if m.startswith("commands.")]
+        tasks = [m for m in self.loaded_ext if m.startswith("tasks.")]
+
+        console.print(f"🛠️ {len(tasks)} module(s) de tâches chargé(s).")
+        console.print(f"⚙️ {len(cmds)} module(s) de commandes chargé(s).")
         if self.failed_ext:
             console.print(
                 f"⚠️ {len(self.failed_ext)} échec(x) de chargement : "
                 + ", ".join(self.failed_ext)
             )
+
+        # Comptage des commandes utilisateur
         console.print(
-            f"📜 {len(self.commands)} text command(s), "
+            f"📜 {len(self.commands)} préfixe command(s), "
             f"{len(self.tree.get_commands())} slash command(s)."
         )
 
