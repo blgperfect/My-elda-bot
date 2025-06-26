@@ -19,64 +19,77 @@ STATUS_MESSAGE = "Bonjour chez melo"
 # ─── Logger “joli” ──────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("elda")
-
-# Ne conserver que les logs ERROR+ pour discord.py et ses sous-modules
 for name in ("discord", "discord.client", "discord.gateway", "discord.ext.commands.bot"):
     logging.getLogger(name).setLevel(logging.ERROR)
 
 console = Console()
 
-# ─── Intents & Bot ──────────────────────────────────────────────────────────
-intents = discord.Intents.default()
-intents.members = True
-intents.message_content = True
 
-bot = commands.Bot(
-    command_prefix="!",
-    intents=intents,
-    owner_id=OWNER_ID,
-    help_command=None,
-)
+class EldaBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.members = True
+        intents.message_content = True
+
+        super().__init__(
+            command_prefix="!",
+            intents=intents,
+            owner_id=OWNER_ID,
+            help_command=None,
+        )
+
+        self.loaded_ext: list[str] = []
+        self.failed_ext: list[str] = []
+
+    async def setup_hook(self):
+        """Charge récursivement les extensions et synchronise les slash commands."""
+        base = Path(__file__).parent
+
+        for pkg in ("commands", "tasks"):
+            folder = base / pkg
+            for file in folder.rglob("*.py"):
+                # on ignore les __init__.py et les fichiers commençant par _
+                if file.name.startswith("_") or file.name == "__init__.py":
+                    continue
+
+                # ex: commands/admin/mod.py -> commands.admin.mod
+                rel = file.relative_to(base).with_suffix("")  # ex: commands/admin/mod
+                module = ".".join(rel.parts)
+
+                try:
+                    await self.load_extension(module)
+                    self.loaded_ext.append(module)
+                except Exception as e:
+                    logger.exception(f"Failed to load extension {module}: {e}")
+                    self.failed_ext.append(module)
+
+        # Synchronise toutes les commandes slash
+        await self.tree.sync()
+
+    async def on_ready(self):
+        # Affichage épuré
+        console.print(f"✅ Bot connecté en tant que {self.user}")
+        await self.change_presence(activity=discord.Game(STATUS_MESSAGE))
+        console.print(f"✨ Statut défini sur « {STATUS_MESSAGE} »")
+
+        # Résumé du chargement
+        console.print(f"🔧 {len(self.loaded_ext)} extension(s) chargée(s).")
+        if self.failed_ext:
+            console.print(
+                f"⚠️ {len(self.failed_ext)} échec(x) de chargement : "
+                + ", ".join(self.failed_ext)
+            )
+        console.print(
+            f"📜 {len(self.commands)} text command(s), "
+            f"{len(self.tree.get_commands())} slash command(s)."
+        )
+
 
 # ─── Connexion à MongoDB ────────────────────────────────────────────────────
 mongo_client = AsyncIOMotorClient(MONGO_URI)
 db = mongo_client[DATABASE_NAME]
 
-# ─── Chargement dynamique des extensions ───────────────────────────────────
-BASE_DIR = Path(__file__).parent
-_loaded_ext = []
-_failed_ext = []
-
-def load_extensions_from(folder: Path, package: str):
-    for file in folder.glob("*.py"):
-        if file.name.startswith("_"):
-            continue
-        module = f"{package}.{file.stem}"
-        try:
-            bot.load_extension(module)
-            _loaded_ext.append(module)
-        except Exception as e:
-            logger.exception(f"Failed to load extension {module}: {e}")
-            _failed_ext.append(module)
-
-# Charger commands/ et tasks/
-load_extensions_from(BASE_DIR / "commands", "commands")
-load_extensions_from(BASE_DIR / "tasks",    "tasks")
-
-# ─── Événement ready ─────────────────────────────────────────────────────────
-@bot.event
-async def on_ready():
-    # Messages de connexion épurés
-    console.print(f"✅ Bot connecté en tant que {bot.user}")
-    await bot.change_presence(activity=discord.Game(STATUS_MESSAGE))
-    console.print(f"✨ Statut défini sur « {STATUS_MESSAGE} »")
-
-    # Résumé du chargement
-    console.print(f"🔧 {_loaded_ext.__len__()} extensions chargées.")
-    if _failed_ext:
-        console.print(f"⚠️ {_failed_ext.__len__()} extension(s) ont échoué à charger : {', '.join(_failed_ext)}")
-    console.print(f"📜 {len(bot.commands)} commande(s) disponibles.")
-
-# ─── Point d’entrée ─────────────────────────────────────────────────────────
+# ─── Démarrage du Bot ───────────────────────────────────────────────────────
 if __name__ == "__main__":
+    bot = EldaBot()
     bot.run(DISCORD_TOKEN)
