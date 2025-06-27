@@ -11,7 +11,7 @@ class SoutienListener(commands.Cog):
 
     @commands.Cog.listener()
     async def on_presence_update(self, before: discord.Member, after: discord.Member):
-        # Ne traiter que si même guild
+        # Même guild seulement
         if before.guild != after.guild:
             return
 
@@ -19,13 +19,19 @@ class SoutienListener(commands.Cog):
         if not cfg:
             return
 
-        phrase = cfg["phrase"].lower()
-        role   = after.guild.get_role(cfg["role_id"])
-        chan   = after.guild.get_channel(cfg["channel_id"])
-        if not role or not chan:
+        phrase       = cfg["phrase"].lower()
+        role         = after.guild.get_role(cfg["role_id"])
+        announce_ch  = after.guild.get_channel(cfg["announce_ch_id"])
+        if not role or not announce_ch:
             return
 
-        # Extraire le Custom Status
+        # Choix du salon pour les logs d’activations/désactivations
+        log_ch = None
+        if cfg.get("log_enabled", False):
+            log_ch = after.guild.get_channel(cfg.get("log_ch_id"))
+        target = log_ch or announce_ch
+
+        # Extraction du Custom Status
         def extract_status(member: discord.Member) -> str:
             for act in member.activities:
                 if isinstance(act, discord.CustomActivity):
@@ -38,22 +44,20 @@ class SoutienListener(commands.Cog):
         has  = phrase in post
 
         if has and not had:
-            # Ajout du rôle
+            # Ajout du rôle + DM
             await after.add_roles(role, reason="Soutien activé")
-            # Envoi du DM de remerciement
             try:
-                await after.send(
-                    f"🎉 Merci de soutenir **{after.guild.name}** ! Vous avez obtenu votre rôle **{role.name}**."
-                )
+                await after.send(f"🎉 Merci de soutenir **{after.guild.name}** ! Rôle **{role.name}** ajouté.")
             except discord.Forbidden:
                 pass
-            # Message public
-            await chan.send(f"{EMOJIS.get('PARTY','🎉')} {after.mention} a activé le soutien !")
+            # **Log**  
+            await target.send(f"{EMOJIS.get('PARTY','🎉')} {after.mention} soutien le server !")
 
         elif had and not has:
             # Retrait du rôle
             await after.remove_roles(role, reason="Soutien désactivé")
-            await chan.send(f"{EMOJIS.get('CROSS','✖️')} {after.mention} a désactivé le soutien !")
+            # **Log**
+            await target.send(f"{EMOJIS.get('CROSS','✖️')} {after.mention} ne soutien plus le server !")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(SoutienListener(bot))
