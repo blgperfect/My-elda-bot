@@ -27,11 +27,13 @@ console = Console()
 
 class EldaBot(commands.Bot):
     def __init__(self):
+        # ─── Intents ──────────────────────────────────────────────────────────
         intents = discord.Intents.default()
         intents.members = True
         intents.message_content = True
+        intents.presences = True   # ← Activation de l’Intent presences
 
-        # on crée le bot en passant directement le custom status
+        # Création du bot avec statut personnalisé
         super().__init__(
             command_prefix="!",
             intents=intents,
@@ -63,7 +65,7 @@ class EldaBot(commands.Bot):
                     logger.exception(f"Failed to load extension {module}: {e}")
                     self.failed_ext.append(module)
 
-        # Synchronise toutes les commandes slash avec Discord
+        # Synchronisation des commandes slash
         await self.tree.sync()
 
     async def on_ready(self):
