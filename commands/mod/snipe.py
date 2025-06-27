@@ -1,9 +1,10 @@
-# commands/mod/snipe.py
+#ce code sert a récupéré le dernier message supprimé d'un salon. c'est quand meme
+# utiles si vous n'aviez pas programé de log pour sa.
 
+import datetime
 import discord
 from discord import app_commands
 from discord.ext import commands
-
 from config.params import (
     EMBED_COLOR,
     EMBED_FOOTER_TEXT,
@@ -16,17 +17,20 @@ class Snipe(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # Initialisation du stockage si nécessaire
+        # Mapping channel_id -> (Message, deletion_time)
         if not hasattr(bot, "deleted_messages"):
-            bot.deleted_messages: dict[int, discord.Message] = {}
+            bot.deleted_messages: dict[int, tuple[discord.Message, datetime.datetime]] = {}
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
         # Ignorez les suppressions en DM
         if message.guild is None:
             return
-        # Stockez le dernier message supprimé par salon
-        self.bot.deleted_messages[message.channel.id] = message
+        # Stocke le message + timestamp local
+        self.bot.deleted_messages[message.channel.id] = (
+            message,
+            datetime.datetime.now()
+        )
 
     @app_commands.command(
         name="snipe",
@@ -34,7 +38,7 @@ class Snipe(commands.Cog):
     )
     @app_commands.default_permissions(ban_members=True)
     async def snipe(self, interaction: discord.Interaction):
-        # --- Vérification de permission (redondante mais permet un embed personnalisé) ---
+        # Vérification de permission
         if not interaction.user.guild_permissions.ban_members:
             embed = discord.Embed(
                 title=MESSAGES["PERMISSION_ERROR"],
@@ -44,11 +48,11 @@ class Snipe(commands.Cog):
             embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        # --- Préparation de la réponse ---
+        # Défer pour pouvoir follow-up
         await interaction.response.defer()
 
-        msg = self.bot.deleted_messages.get(interaction.channel.id)
-        if not msg:
+        entry = self.bot.deleted_messages.get(interaction.channel.id)
+        if not entry:
             embed = discord.Embed(
                 description="🚫 Aucun message supprimé trouvé dans ce salon.",
                 color=EMBED_COLOR
@@ -56,24 +60,24 @@ class Snipe(commands.Cog):
             embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
             return await interaction.followup.send(embed=embed, ephemeral=True)
 
-        # --- Construction de l'embed résultat ---
+        msg, deleted_at = entry
+
+        # Construction de l'embed résultat
         embed = discord.Embed(
             color=EMBED_COLOR,
             description=msg.content or "_(Pas de contenu textuel)_"
         )
         embed.set_author(
-            name=str(msg.author),
+            name=f"{msg.author} ({msg.author.id})",
             icon_url=msg.author.display_avatar.url
         )
-        embed.add_field(name="Salon", value=f"<#{msg.channel.id}>", inline=True)
-        embed.add_field(name="ID du message", value=str(msg.id), inline=True)
 
-        if msg.attachments:
-            urls = "\n".join(att.url for att in msg.attachments)
-            embed.add_field(name="Pièces jointes", value=urls, inline=False)
-
-        embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-        embed.timestamp = msg.created_at
+        # Footer avec heure de suppression (locale)
+        time_str = deleted_at.strftime("%H:%M:%S")
+        embed.set_footer(
+            text=f"{EMBED_FOOTER_TEXT} • Supprimé à {time_str}",
+            icon_url=EMBED_FOOTER_ICON_URL
+        )
 
         await interaction.followup.send(embed=embed)
 
