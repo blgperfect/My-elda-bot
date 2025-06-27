@@ -1,4 +1,5 @@
 # commands/userinfo.py
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -10,14 +11,14 @@ class UserInfoView(discord.ui.View):
         self.embeds = embeds
         self.index = 0
 
-        # Bouton lien vers le profil Discord
+        # Lien vers le profil du membre
         self.add_item(discord.ui.Button(
             style=discord.ButtonStyle.link,
             label="Profil du membre",
             url=profile_url
         ))
 
-        # Bouton suivant / précédent si plusieurs pages
+        # Pagination si plusieurs embeds
         if len(embeds) > 1:
             self.next_button = self.NextButton()
             self.add_item(self.next_button)
@@ -33,14 +34,12 @@ class UserInfoView(discord.ui.View):
             view: UserInfoView = self.view  # type: ignore
             view.index = (view.index + 1) % len(view.embeds)
             embed = view.embeds[view.index]
-
-            # Change l’emoji pour indiquer retour
-            if view.index == 0:
-                self.emoji = EMOJIS.get("ARROW", "➡️")
-            else:
-                self.emoji = EMOJIS.get("BACK", "⬅️")
-
+            # inverse l’emoji pour indiquer direction
+            self.emoji = (
+                EMOJIS.get("BACK", "⬅️") if view.index else EMOJIS.get("ARROW", "➡️")
+            )
             await interaction.response.edit_message(embed=embed, view=view)
+
 
 class UserInfo(commands.Cog):
     """Commande slash /userinfo pour afficher les informations d'un membre."""
@@ -60,24 +59,31 @@ class UserInfo(commands.Cog):
     ):
         target = member or interaction.user
 
-        # Récupère bannière (profil principal)
+        # ── Bannière (profil principal) ────────────────────────────────────────
+        banner_url: str | None = None
         try:
             user_obj = await self.bot.fetch_user(target.id)
-            banner = user_obj.banner.url if user_obj.banner else None
+            banner_url = user_obj.banner.url if user_obj.banner else None
         except Exception:
-            banner = None
+            banner_url = None
 
-        # Prépare les champs de la page 1
+        # ── Statut personnalisé (Custom Activity) ───────────────────────────────
+        custom_status: str | None = None
+        for act in target.activities:
+            if getattr(act, "type", None) == discord.ActivityType.custom:
+                custom_status = act.name
+                break
+
+        # ── EMBED 1 : Informations principales ─────────────────────────────────
         embed1 = discord.Embed(
             title=f"Information de {target.mention}",
             color=EMBED_COLOR
         )
         embed1.set_thumbnail(url=target.display_avatar.url)
-        if banner:
-            embed1.set_image(url=banner)
+        if banner_url:
+            embed1.set_image(url=banner_url)
         embed1.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-        # Display name & date de création du compte
         embed1.add_field(
             name="Display Name",
             value=target.display_name,
@@ -88,34 +94,19 @@ class UserInfo(commands.Cog):
             value=target.created_at.strftime("%d %B %Y"),
             inline=True
         )
-
-        # Date de join & status
-        status = str(target.status).capitalize() if target.status and target.status != discord.Status.offline else "—"
         embed1.add_field(
             name="Rejoint le serveur",
             value=target.joined_at.strftime("%d %B %Y"),
             inline=True
         )
-        embed1.add_field(
-            name="Statut",
-            value=status,
-            inline=True
-        )
+        if custom_status:
+            embed1.add_field(
+                name="Statut perso",
+                value=custom_status,
+                inline=True
+            )
 
-        # Badges
-        badges = [flag.name for flag in target.public_flags.all()]
-        if badges:
-            badge_list = " ".join(f"`{b}`" for b in badges)
-        else:
-            badge_list = "Cette personne n'a pas de badge"
-        embed1.add_field(
-            name="Badge(s)",
-            value=badge_list,
-            inline=False
-        )
-
-        # Prépare la page 2 : dernier message & dernier rôle
-        # Dernier message (scan rapide dans les channels où le bot peut lire)
+        # ── EMBED 2 : Historique (dernier message) ──────────────────────────────
         last_msg = None
         for chan in interaction.guild.text_channels:
             if chan.permissions_for(interaction.guild.me).read_message_history:
@@ -129,24 +120,12 @@ class UserInfo(commands.Cog):
             if last_msg:
                 break
 
-        # Dernier rôle ajouté (audit logs)
-        last_role = None
-        async for entry in interaction.guild.audit_logs(limit=100, action=discord.AuditLogAction.member_role_update):
-            if entry.target.id == target.id:
-                for change in entry.changes:
-                    if change.key == "roles":
-                        old = set(change.before)
-                        new = set(change.after)
-                        added = new - old
-                        if added:
-                            last_role = interaction.guild.get_role(added.pop())
-                break
-
         embed2 = discord.Embed(
             title="Historique de l'utilisateur",
             color=EMBED_COLOR
         )
         embed2.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
+
         if last_msg:
             embed2.add_field(
                 name="Dernier message",
@@ -163,19 +142,12 @@ class UserInfo(commands.Cog):
                 inline=False
             )
 
-        embed2.add_field(
-            name="Dernier rôle reçu",
-            value=last_role.name if last_role else "Aucun",
-            inline=False
-        )
-
-        # URL du profil Discord
+        # ── Envoi avec pagination & bouton Profil ───────────────────────────────
         profile_url = f"https://discord.com/users/{target.id}"
         view = UserInfoView([embed1, embed2], profile_url)
-
         await interaction.response.send_message(embed=embed1, view=view)
-        # Récupère ensuite le message pour la gestion du timeout
         view.message = await interaction.original_response()
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(UserInfo(bot))
