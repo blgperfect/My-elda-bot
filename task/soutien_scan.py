@@ -1,48 +1,59 @@
+# commands/admin/soutien_scan.py
+
 import discord
-from discord.ext import tasks, commands
+from discord.ext import commands
 from config.mongo import soutien_collection
 from config.params import EMOJIS
 
-class SoutienScanner(commands.Cog):
+class SoutienListener(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.check_bios.start()
 
-    @tasks.loop(minutes=5.0)
-    async def check_bios(self):
-        for guild in self.bot.guilds:
-            cfg = await soutien_collection.find_one({"_id": guild.id})
-            if not cfg:
-                continue
+    @commands.Cog.listener()
+    async def on_presence_update(self, before: discord.Member, after: discord.Member):
+        # Ne traiter que si même guild
+        if before.guild != after.guild:
+            return
 
-            phrase = cfg["phrase"]
-            role   = guild.get_role(cfg["role_id"])
-            chan   = guild.get_channel(cfg["channel_id"])
-            if not role or not chan:
-                continue
+        cfg = await soutien_collection.find_one({"_id": after.guild.id})
+        if not cfg:
+            return
 
-            for member in guild.members:
-                # Récupérer la bio
-                try:
-                    route = discord.http.Route("GET", "/users/{user_id}/profile", user_id=member.id)
-                    data  = await self.bot.http.request(route)
-                    bio   = data.get("bio", "") or ""
-                except:
-                    continue
+        phrase = cfg["phrase"].lower()
+        role   = after.guild.get_role(cfg["role_id"])
+        chan   = after.guild.get_channel(cfg["channel_id"])
+        if not role or not chan:
+            return
 
-                has = phrase in bio
-                in_role = role in member.roles
+        # Extraire le Custom Status
+        def extract_status(member: discord.Member) -> str:
+            for act in member.activities:
+                if isinstance(act, discord.CustomActivity):
+                    return (act.state or "").lower()
+            return ""
 
-                if has and not in_role:
-                    await member.add_roles(role, reason="Soutien activé")
-                    await chan.send(f"{EMOJIS.get('PARTY','🎉')} {member.mention} a activé le soutien !")
-                elif not has and in_role:
-                    await member.remove_roles(role, reason="Soutien désactivé")
-                    await chan.send(f"{EMOJIS.get('CROSS','✖️')} {member.mention} a désactivé le soutien !")
+        prev = extract_status(before)
+        post = extract_status(after)
+        had  = phrase in prev
+        has  = phrase in post
 
-    @check_bios.before_loop
-    async def before_check(self):
-        await self.bot.wait_until_ready()
+        if has and not had:
+            # Ajout du rôle
+            await after.add_roles(role, reason="Soutien activé")
+            # Envoi du DM de remerciement
+            try:
+                await after.send(
+                    f"🎉 Merci de soutenir **{after.guild.name}** ! Vous avez obtenu votre rôle **{role.name}**."
+                )
+            except discord.Forbidden:
+                pass
+            # Message public
+            await chan.send(f"{EMOJIS.get('PARTY','🎉')} {after.mention} a activé le soutien !")
+
+        elif had and not has:
+            # Retrait du rôle
+            await after.remove_roles(role, reason="Soutien désactivé")
+            await chan.send(f"{EMOJIS.get('CROSS','✖️')} {after.mention} a désactivé le soutien !")
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(SoutienScanner(bot))
+    await bot.add_cog(SoutienListener(bot))
