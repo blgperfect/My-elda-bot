@@ -1,9 +1,8 @@
-# commands/userinfo.py
-
 import discord
 from discord import app_commands
 from discord.ext import commands
 from config.params import EMBED_COLOR, EMBED_FOOTER_TEXT, EMBED_FOOTER_ICON_URL, EMOJIS
+
 
 class UserInfoView(discord.ui.View):
     def __init__(self, embeds: list[discord.Embed], profile_url: str):
@@ -11,17 +10,16 @@ class UserInfoView(discord.ui.View):
         self.embeds = embeds
         self.index = 0
 
-        # Lien vers le profil du membre
+        # Bouton lien vers le profil Discord
         self.add_item(discord.ui.Button(
             style=discord.ButtonStyle.link,
             label="Profil du membre",
             url=profile_url
         ))
 
-        # Pagination si plusieurs embeds
+        # Pagination si plusieurs pages
         if len(embeds) > 1:
-            self.next_button = self.NextButton()
-            self.add_item(self.next_button)
+            self.add_item(self.NextButton())
 
     class NextButton(discord.ui.Button):
         def __init__(self):
@@ -34,7 +32,7 @@ class UserInfoView(discord.ui.View):
             view: UserInfoView = self.view  # type: ignore
             view.index = (view.index + 1) % len(view.embeds)
             embed = view.embeds[view.index]
-            # inverse l’emoji pour indiquer direction
+            # Alterne l'emoji pour la pagination
             self.emoji = (
                 EMOJIS.get("BACK", "⬅️") if view.index else EMOJIS.get("ARROW", "➡️")
             )
@@ -57,17 +55,20 @@ class UserInfo(commands.Cog):
         interaction: discord.Interaction,
         member: discord.Member | None = None
     ):
+        # Ack rapide pour éviter le timeout Discord
+        await interaction.response.defer(thinking=True)
+
         target = member or interaction.user
 
-        # ── Bannière (profil principal) ────────────────────────────────────────
+        # ── Bannière (profil principal) ───────────────────────────────────────
         banner_url: str | None = None
         try:
             user_obj = await self.bot.fetch_user(target.id)
             banner_url = user_obj.banner.url if user_obj.banner else None
         except Exception:
-            banner_url = None
+            pass
 
-        # ── Statut personnalisé (Custom Activity) ───────────────────────────────
+        # ── Statut personnalisé (Custom Activity) ─────────────────────────────
         custom_status: str | None = None
         for act in target.activities:
             if getattr(act, "type", None) == discord.ActivityType.custom:
@@ -76,7 +77,7 @@ class UserInfo(commands.Cog):
 
         # ── EMBED 1 : Informations principales ─────────────────────────────────
         embed1 = discord.Embed(
-            title=f"Information de {target.mention}",
+            title=f"🔍 Informations de {target}",
             color=EMBED_COLOR
         )
         embed1.set_thumbnail(url=target.display_avatar.url)
@@ -85,25 +86,25 @@ class UserInfo(commands.Cog):
         embed1.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
         embed1.add_field(
-            name="Display Name",
+            name="👤 Display Name",
             value=target.display_name,
             inline=True
         )
         embed1.add_field(
-            name="Date de création",
+            name="📅 Création du compte",
             value=target.created_at.strftime("%d %B %Y"),
             inline=True
         )
         embed1.add_field(
-            name="Rejoint le serveur",
+            name="🚪 Rejoint le serveur",
             value=target.joined_at.strftime("%d %B %Y"),
             inline=True
         )
         if custom_status:
             embed1.add_field(
-                name="Statut perso",
+                name="⭐ Statut perso",
                 value=custom_status,
-                inline=True
+                inline=False
             )
 
         # ── EMBED 2 : Historique (dernier message) ──────────────────────────────
@@ -121,14 +122,14 @@ class UserInfo(commands.Cog):
                 break
 
         embed2 = discord.Embed(
-            title="Historique de l'utilisateur",
+            title="📜 Dernier message",
             color=EMBED_COLOR
         )
         embed2.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-        if last_msg:
+        if last_msg and last_msg.content:
             embed2.add_field(
-                name="Dernier message",
+                name="Contenu",
                 value=(
                     f"> {last_msg.content}\n"
                     f"*Le {last_msg.created_at.strftime('%d %B %Y à %H:%M')}*"
@@ -137,16 +138,16 @@ class UserInfo(commands.Cog):
             )
         else:
             embed2.add_field(
-                name="Dernier message",
-                value="Impossible de récupérer le dernier message.",
+                name="Contenu",
+                value="Aucun message récupéré ou lecture interdite.",
                 inline=False
             )
 
-        # ── Envoi avec pagination & bouton Profil ───────────────────────────────
+        # ── Envoi via followup après defer ──────────────────────────────────────
         profile_url = f"https://discord.com/users/{target.id}"
         view = UserInfoView([embed1, embed2], profile_url)
-        await interaction.response.send_message(embed=embed1, view=view)
-        view.message = await interaction.original_response()
+        message = await interaction.followup.send(embed=embed1, view=view)
+        view.message = message
 
 
 async def setup(bot: commands.Bot):
