@@ -1,3 +1,6 @@
+# === Lien top.gg
+TOPGG = "FUTUR LIEN QUI SERAS MIS ICI"
+
 # === Apparence des embeds ===
 EMBED_COLOR = 0xE3BAE8
 EMBED_FOOTER_TEXT = "©𝐸𝓁𝒹𝒶 𝐵𝑜𝓉"
