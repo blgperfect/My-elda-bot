@@ -6,6 +6,21 @@ from discord import app_commands
 from discord.ext import commands
 from config.params import EMBED_COLOR, EMBED_FOOTER_TEXT, EMBED_FOOTER_ICON_URL, EMOJIS
 
+# Mapping des features brutes → libellés plus jolis
+FEATURE_LABELS: dict[str, str] = {
+    "INVITE_SPLASH": "💧 Splash d’invitation",
+    "NEWS": "🗞️ Salon d’annonces",
+    "VIDEO_BITRATE_ENHANCED": "🎥 Bitrate vidéo augmenté",
+    "VIDEO_QUALITY_720_60FPS": "📺 Qualité 720p @60 fps",
+    "ANIMATED_ICON": "✨ Icône animée",
+    "TIERLESS_BOOSTING": "🚀 Boosting sans palier",
+    "SOUNDBOARD": "🎙️ Soundboard",
+    "GUILD_TAGS": "🏷️ Tags du serveur",
+    "AUDIO_BITRATE_128_KBPS": "🔊 Audio 128 kbps",
+    "STAGE_CHANNEL_VIEWERS_50": "👥 50 spectateurs en Stage",
+    "COMMUNITY": "🌐 Communauté",
+    "TIERLESS_BOOSTING_SYSTEM_MESSAGE": "🔔 Message de boosting"
+}
 
 class InviteInfoView(discord.ui.View):
     def __init__(
@@ -20,30 +35,26 @@ class InviteInfoView(discord.ui.View):
         self.embeds = embeds
         self.index = 0
 
-        # Bouton : lien d'invitation
+        # Lien d'invitation
         self.add_item(discord.ui.Button(
             style=discord.ButtonStyle.link,
             label="Lien d'invitation",
             url=invite_url
         ))
 
-        # Bouton : icône du serveur
+        # Icône, bannière, splash
         if icon_url:
             self.add_item(discord.ui.Button(
                 style=discord.ButtonStyle.link,
                 label="Icône du serveur",
                 url=icon_url
             ))
-
-        # Bouton : bannière du serveur
         if banner_url:
             self.add_item(discord.ui.Button(
                 style=discord.ButtonStyle.link,
                 label="Bannière du serveur",
                 url=banner_url
             ))
-
-        # Bouton : splash (si existant)
         if splash_url:
             self.add_item(discord.ui.Button(
                 style=discord.ButtonStyle.link,
@@ -51,10 +62,10 @@ class InviteInfoView(discord.ui.View):
                 url=splash_url
             ))
 
-        # Pagination si plus d'un embed
+        # Pagination si plusieurs embeds
         if len(embeds) > 1:
-            self.next_button = self.NextButton()
-            self.add_item(self.next_button)
+            btn = self.NextButton()
+            self.add_item(btn)
 
     class NextButton(discord.ui.Button):
         def __init__(self):
@@ -62,12 +73,10 @@ class InviteInfoView(discord.ui.View):
                 style=discord.ButtonStyle.secondary,
                 emoji=EMOJIS.get("ARROW", "➡️")
             )
-
         async def callback(self, interaction: discord.Interaction):
             view: InviteInfoView = self.view  # type: ignore
             view.index = (view.index + 1) % len(view.embeds)
             embed = view.embeds[view.index]
-            # Alterner l'emoji entre → et ←
             self.emoji = (
                 EMOJIS.get("BACK", "⬅️") if view.index else EMOJIS.get("ARROW", "➡️")
             )
@@ -90,9 +99,9 @@ class InviteInfo(commands.Cog):
         interaction: discord.Interaction,
         invite_link: str
     ):
-        await interaction.response.defer(ephemeral=False)
+        await interaction.response.defer()
 
-        # ── Nettoyage et extraction du code d'invite ──────────────────────────
+        # ── Nettoyage + extraction du code ────────────────────────────────────
         clean = invite_link.rstrip("/").split("?", 1)[0]
         match = re.search(
             r"(?:https?://)?(?:www\.)?"
@@ -101,12 +110,10 @@ class InviteInfo(commands.Cog):
             clean
         )
         if not match:
-            await interaction.followup.send("❌ Lien d'invitation invalide.", ephemeral=True)
-            return
-
+            return await interaction.followup.send("❌ Lien d'invitation invalide.", ephemeral=True)
         code = match.group(1)
 
-        # ── Fetch de l'invite via l'API Discord ───────────────────────────────
+        # ── Récupération via l'API Discord ────────────────────────────────────
         try:
             invite = await self.bot.fetch_invite(
                 code,
@@ -114,15 +121,13 @@ class InviteInfo(commands.Cog):
                 with_expiration=True
             )
         except discord.NotFound:
-            await interaction.followup.send("❌ Invitation non trouvée ou expirée.", ephemeral=True)
-            return
+            return await interaction.followup.send("❌ Invitation non trouvée ou expirée.", ephemeral=True)
         except discord.HTTPException as e:
-            await interaction.followup.send(f"❌ Erreur lors de la récupération : {e}", ephemeral=True)
-            return
+            return await interaction.followup.send(f"❌ Erreur API : {e}", ephemeral=True)
 
         guild = invite.guild  # PartialInviteGuild
 
-        # ── EMBED 1 : Infos générales du serveur ──────────────────────────────
+        # ── EMBED 1 : Infos générales ─────────────────────────────────────────
         embed1 = discord.Embed(
             title=f"🏷️ {guild.name}",
             description=guild.description or "_Pas de description_",
@@ -130,30 +135,28 @@ class InviteInfo(commands.Cog):
         )
         if guild.icon:
             embed1.set_thumbnail(url=guild.icon.url)
-        embed1.add_field(name="🆔 ID du serveur", value=guild.id, inline=True)
+        embed1.add_field(name="🆔 ID", value=guild.id, inline=True)
         embed1.add_field(name="💬 Salon cible", value=invite.channel.name, inline=True)
+        created = getattr(guild, "created_at", None)
         embed1.add_field(
-            name="👑 Créé le",
-            value=(
-                guild.created_at.strftime("%d %B %Y")
-                if hasattr(guild, "created_at") else "N/A"
-            ),
+            name="📅 Créé le",
+            value=created.strftime("%d %B %Y") if created else "N/A",
             inline=True
         )
         embed1.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-        # ── EMBED 2 : Statistiques & invitation ───────────────────────────────
+        # ── EMBED 2 : Stats & Features ────────────────────────────────────────
         embed2 = discord.Embed(
-            title="📊 Statistiques d'invitation",
+            title="📊 Statistiques & fonctionnalités",
             color=EMBED_COLOR
         )
         embed2.add_field(
-            name="👥 Membres approximatifs",
+            name="👥 Membres (approx.)",
             value=invite.approximate_member_count or "N/A",
             inline=True
         )
         embed2.add_field(
-            name="📶 En ligne approximativement",
+            name="📶 Connectés (approx.)",
             value=invite.approximate_presence_count or "N/A",
             inline=True
         )
@@ -165,34 +168,31 @@ class InviteInfo(commands.Cog):
             ),
             inline=True
         )
-        embed2.add_field(
-            name="🚀 Utilisations",
-            value=f"{invite.uses or 0}/{invite.max_uses or '∞'}",
-            inline=True
-        )
-        embed2.add_field(
-            name="🛡️ Temporary",
-            value=str(invite.temporary),
-            inline=True
-        )
-        embed2.add_field(
-            name="🏷️ Features",
-            value=", ".join(guild.features) if guild.features else "Aucune",
-            inline=False
-        )
+
+        # Features → formatage élégant
+        features = guild.features or []
+        if features:
+            nice = [
+                FEATURE_LABELS.get(feat, f"• {feat.replace('_', ' ').title()}")
+                for feat in features
+            ]
+            embed2.add_field(
+                name="🏷️ Features",
+                value="\n".join(nice),
+                inline=False
+            )
+
         embed2.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-        # ── Préparation des URLs pour les boutons ────────────────────────────
+        # ── URLs pour les boutons ────────────────────────────────────────────
         invite_url = f"https://discord.gg/{invite.code}"
-        icon_url   = guild.icon.url   if guild.icon else None
+        icon_url   = guild.icon.url if guild.icon else None
         banner_url = getattr(guild, "banner", None)
-        if banner_url:
-            banner_url = banner_url.url
+        banner_url = banner_url.url if banner_url else None
         splash_url = getattr(guild, "splash", None)
-        if splash_url:
-            splash_url = splash_url.url
+        splash_url = splash_url.url if splash_url else None
 
-        # ── Envoi avec pagination et boutons ────────────────────────────────
+        # ── Envoi du message avec pagination et boutons ───────────────────────
         view = InviteInfoView(
             embeds=[embed1, embed2],
             invite_url=invite_url,
