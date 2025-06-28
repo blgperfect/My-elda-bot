@@ -1,11 +1,10 @@
-# commands/mod/addemoji.py
-
 import aiohttp
 import discord
 from discord.ext import commands
 from discord import app_commands
 
 from config.params import EMBED_COLOR, EMBED_FOOTER_TEXT, EMBED_FOOTER_ICON_URL
+
 
 class RenameEmojiModal(discord.ui.Modal, title="Renommer l'emoji"):
     new_name = discord.ui.TextInput(
@@ -25,13 +24,14 @@ class RenameEmojiModal(discord.ui.Modal, title="Renommer l'emoji"):
             ephemeral=True
         )
 
+
 class ChangeNameView(discord.ui.View):
     def __init__(self, emoji: discord.Emoji, *, timeout: float = 120):
         super().__init__(timeout=timeout)
         self.emoji = emoji
 
     @discord.ui.button(label="Changer le nom de l'emoji", style=discord.ButtonStyle.secondary)
-    async def rename_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def rename_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_emojis:
             return await interaction.response.send_message(
                 "🚫 Vous n'avez pas la permission de gérer les emojis.",
@@ -45,6 +45,7 @@ class ChangeNameView(discord.ui.View):
                 child.disabled = True
         if hasattr(self, "message"):
             await self.message.edit(view=self)
+
 
 class EmojiCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -61,7 +62,6 @@ class EmojiCog(commands.Cog):
     async def addemoji(self, interaction: discord.Interaction, emoji: str):
         await interaction.response.defer()
 
-        # Parse et validation
         partial = discord.PartialEmoji.from_str(emoji)
         if partial.id is None:
             return await interaction.followup.send(
@@ -69,7 +69,6 @@ class EmojiCog(commands.Cog):
                 ephemeral=True
             )
 
-        # Téléchargement de l'image
         try:
             url = str(partial.url)
             async with aiohttp.ClientSession() as session:
@@ -83,7 +82,6 @@ class EmojiCog(commands.Cog):
                 ephemeral=True
             )
 
-        # Création de l'emoji
         try:
             new_emoji = await interaction.guild.create_custom_emoji(
                 name=partial.name,
@@ -101,7 +99,6 @@ class EmojiCog(commands.Cog):
                 ephemeral=True
             )
 
-        # Construction de l'embed
         embed = discord.Embed(
             title="✅ Emoji ajouté !",
             description=(
@@ -113,7 +110,6 @@ class EmojiCog(commands.Cog):
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
         embed.set_image(url=str(new_emoji.url))
 
-        # Bouton de renommage temporaire
         view = ChangeNameView(new_emoji)
         message = await interaction.followup.send(embed=embed, view=view)
         view.message = message
@@ -130,6 +126,7 @@ class EmojiCog(commands.Cog):
                 f"❌ Une erreur est survenue : {error}",
                 ephemeral=True
             )
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(EmojiCog(bot))
