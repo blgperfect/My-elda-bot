@@ -1,3 +1,6 @@
+# commands/mod/addemoji.py
+
+import re
 import aiohttp
 import discord
 from discord.ext import commands
@@ -5,11 +8,10 @@ from discord import app_commands
 
 from config.params import EMBED_COLOR, EMBED_FOOTER_TEXT, EMBED_FOOTER_ICON_URL
 
-
 class RenameEmojiModal(discord.ui.Modal, title="Renommer l'emoji"):
     new_name = discord.ui.TextInput(
         label="Nouveau nom de l'emoji",
-        placeholder="Entrez le nouveau nom (sans espaces)",
+        placeholder="Entrez le nouveau nom (lettres, chiffres, underscore)",
         max_length=32
     )
 
@@ -18,12 +20,27 @@ class RenameEmojiModal(discord.ui.Modal, title="Renommer l'emoji"):
         self.emoji = emoji
 
     async def on_submit(self, interaction: discord.Interaction):
-        await self.emoji.edit(name=self.new_name.value)
+        name = self.new_name.value.strip()
+        # Validation du format
+        if not re.match(r'^[A-Za-z0-9_]+$', name):
+            return await interaction.response.send_message(
+                "❌ Nom invalide : ne peut contenir que lettres, chiffres et underscore (pas d'espaces ni de caractères spéciaux).",
+                ephemeral=True
+            )
+
+        # Tentative de renommage
+        try:
+            await self.emoji.edit(name=name)
+        except discord.HTTPException as e:
+            return await interaction.response.send_message(
+                f"❌ Impossible de renommer l'emoji : {e}",
+                ephemeral=True
+            )
+
         await interaction.response.send_message(
-            f"✅ Emoji renommé en `{self.new_name.value}`.",
+            f"✅ Emoji renommé en `{name}`.",
             ephemeral=True
         )
-
 
 class ChangeNameView(discord.ui.View):
     def __init__(self, emoji: discord.Emoji, *, timeout: float = 120):
@@ -45,7 +62,6 @@ class ChangeNameView(discord.ui.View):
                 child.disabled = True
         if hasattr(self, "message"):
             await self.message.edit(view=self)
-
 
 class EmojiCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -126,7 +142,6 @@ class EmojiCog(commands.Cog):
                 f"❌ Une erreur est survenue : {error}",
                 ephemeral=True
             )
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(EmojiCog(bot))
