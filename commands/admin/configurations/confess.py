@@ -16,10 +16,6 @@ log = logging.getLogger("elda.confession")
 
 
 def parse_label_and_emoji(raw: str):
-    """
-    Extrait du raw un emoji custom de forme <:name:id> ou <a:name:id>,
-    retourne (label, PartialEmoji|None).
-    """
     m = re.search(r'<(a?):(\w+):(\d+)>', raw)
     if not m:
         return raw, None
@@ -43,7 +39,7 @@ class ConfessionModal(Modal, title="🕯️ Confession Anonyme"):
         self.member = member
 
     async def on_submit(self, interaction: discord.Interaction):
-        # 1️⃣ On defer pour garder le token valide
+        # 1️⃣ Defer pour éviter le “Unknown interaction”
         await interaction.response.defer(ephemeral=True)
 
         # 2️⃣ Charger la config
@@ -58,7 +54,7 @@ class ConfessionModal(Modal, title="🕯️ Confession Anonyme"):
                 ephemeral=True
             )
 
-        # 3️⃣ Vérifier le blocage
+        # 3️⃣ Vérifier blocage
         blocked = await confession_collection.find_one({
             "kind": "block",
             "guild_id": self.guild_id,
@@ -100,7 +96,7 @@ class ConfessionModal(Modal, title="🕯️ Confession Anonyme"):
                 MESSAGES["INTERNAL_ERROR"], ephemeral=True
             )
 
-        # 6️⃣ Mettre à jour le panneau : suppression + ré-envoi
+        # 6️⃣ Rafraîchir le panneau (supprimer ancien + renvoyer)
         try:
             if old_id := cfg.get("message_id"):
                 old = await channel.fetch_message(old_id)
@@ -124,10 +120,7 @@ class ConfessionModal(Modal, title="🕯️ Confession Anonyme"):
             {"$set": {"message_id": sent.id}}
         )
 
-        # 7️⃣ Ack à l’utilisateur
-        await interaction.followup.send(
-            MESSAGES["ACTION_SUCCESS"], ephemeral=True
-        )
+        # ### Plus de message de confirmation ici ###
 
 
 class PanelView(View):
@@ -163,13 +156,11 @@ class ConfessionCog(commands.Cog):
         channel: discord.TextChannel,
         button_label: str
     ):
-        # Permission admin
         if not interaction.user.guild_permissions.administrator:
             return await interaction.response.send_message(
                 MESSAGES["PERMISSION_ERROR"], ephemeral=True
             )
 
-        # Upsert config (initialise count à 0 si nouvelle)
         await confession_collection.update_one(
             {"kind": "config", "guild_id": interaction.guild.id},
             {
@@ -182,7 +173,6 @@ class ConfessionCog(commands.Cog):
             upsert=True
         )
 
-        # Envoi du panneau initial
         view = PanelView(interaction.guild.id, button_label)
         embed = discord.Embed(
             title="Confession Anonyme !",
@@ -192,7 +182,6 @@ class ConfessionCog(commands.Cog):
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
         msg = await channel.send(embed=embed, view=view)
 
-        # Sauvegarde du message_id
         await confession_collection.update_one(
             {"kind": "config", "guild_id": interaction.guild.id},
             {"$set": {"message_id": msg.id}}
