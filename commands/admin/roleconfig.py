@@ -1,281 +1,198 @@
-# commands/admin/role.py
-
+# commands/admin/role_config.py
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ui import View, RoleSelect, Button
+from discord.ui import View, Button, RoleSelect
 
-from config.params import EMBED_COLOR, EMBED_FOOTER_TEXT, EMBED_FOOTER_ICON_URL, MESSAGES
+from config.params import (
+    EMBED_COLOR,
+    EMBED_FOOTER_TEXT,
+    EMBED_FOOTER_ICON_URL,
+    MESSAGES,
+    EMOJIS,
+)
 from config.mongo import role_config_collection
 
 
 class RoleConfigView(View):
-    """Vue interactive pour sélectionner et sauvegarder les rôles autorisés."""
-    def __init__(self, author: discord.Member, guild: discord.Guild, initial: list[int]):
+    def __init__(self, author: discord.Member, existing: list[int] | None = None):
         super().__init__(timeout=180)
         self.author = author
-        self.guild = guild
-        # IDs des rôles pré-sélectionnés
-        self.selected: list[int] = initial.copy()
+        self.guild = author.guild
+        # IDs des rôles déjà configurés (venant de la DB)
+        self.allowed_ids: list[int] = existing or []
+        self.message: discord.Message | None = None
 
-        # Sélecteur de rôles
-        sel = RoleSelect(
-            placeholder="🔍 Sélectionnez un ou plusieurs rôles…",
-            min_values=0,
-            max_values=len(guild.roles),
-            row=0
-        )
-        sel.callback = self.select_roles
-        self.add_item(sel)
-
-        # Bouton de confirmation
-        finish = Button(style=discord.ButtonStyle.success, emoji="✅")
-        finish.callback = self.finish
-        self.add_item(finish)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user != self.author:
-            await interaction.response.send_message(
-                MESSAGES["PERMISSION_ERROR"], ephemeral=True
+    async def update_embed(self, interaction: discord.Interaction):
+        # Reconstruit l'embed pour afficher l'état actuel
+        desc = (
+            "**Rôles autorisés :** "
+            + (
+                ", ".join(f"<@&{rid}>" for rid in self.allowed_ids)
+                if self.allowed_ids
+                else "❌ non définis"
             )
-            return False
-        return True
-
-    async def select_roles(self, interaction: discord.Interaction):
-        """Met à jour l’aperçu des rôles sélectionnés."""
-        sel = next(c for c in self.children if isinstance(c, RoleSelect))  # type: ignore
-        self.selected = [r.id for r in sel.values]  # type: ignore
-
-        roles_list = (
-            "\n".join(f"- {self.guild.get_role(rid).mention}" for rid in self.selected)
-            or "Aucun rôle sélectionné."
         )
         embed = discord.Embed(
             title="⚙️ Configuration des rôles autorisés",
+            description=desc + "\n\n1️⃣ Cliquez sur **Sélectionner** pour choisir.",
+            color=EMBED_COLOR,
+        )
+        embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
+
+        # Active le bouton Terminer seulement si on a au moins 1 rôle
+        finish_btn: Button = next(
+            b for b in self.children if getattr(b, "custom_id", None) == "finish"
+        )  # type: ignore
+        finish_btn.disabled = not bool(self.allowed_ids)
+
+        # Édite le message
+        if self.message:
+            await self.message.edit(embed=embed, view=self)
+        else:
+            # fallback
+            await interaction.response.send_message(embed=embed, view=self)
+
+    async def on_timeout(self):
+        for c in self.children:
+            c.disabled = True
+        if self.message:
+            await self.message.edit(
+                content="⏱️ Menu expiré. Relancez `/roleconfig`.",
+                embed=None,
+                view=self
+            )
+
+    @discord.ui.button(
+        label="Sélectionner",
+        style=discord.ButtonStyle.primary,
+        emoji=EMOJIS.get("STAR", "⭐"),
+        custom_id="select"
+    )
+    async def _select(
+        self, interaction: discord.Interaction, button: Button
+    ):
+        # Seul l'auteur initial peut interagir
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message(
+                MESSAGES["PERMISSION_ERROR"], ephemeral=True
+            )
+
+        # Vue temporaire pour choisir les rôles
+        temp = View(timeout=60)
+        sel = RoleSelect(
+            placeholder="🔍 Sélectionnez un ou plusieurs rôles…",
+            min_values=1,
+            max_values=25
+        )
+
+        async def sel_cb(resp: discord.Interaction):
+            # On stocke les IDs et on met à jour l'embed parent
+            self.allowed_ids = [r.id for r in sel.values]
+            await self.update_embed(resp)
+            # On supprime le message temporaire
+            await resp.delete_original_response()
+
+        sel.callback = sel_cb
+        temp.add_item(sel)
+
+        await interaction.response.send_message(
+            "Choisissez les rôles :", view=temp, ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="✅ Terminer",
+        style=discord.ButtonStyle.success,
+        custom_id="finish",
+        disabled=True
+    )
+    async def _finish(
+        self, interaction: discord.Interaction, button: Button
+    ):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message(
+                MESSAGES["PERMISSION_ERROR"], ephemeral=True
+            )
+
+        # Sauvegarde en base MongoDB
+        await role_config_collection.update_one(
+            {"guild_id": self.guild.id},
+            {"$set": {"allowed_roles": self.allowed_ids}},
+            upsert=True
+        )
+
+        # Confirmation finale
+        embed2 = discord.Embed(
+            title=MESSAGES["ACTION_SUCCESS"],
             description=(
-                "Les rôles suivants seront autorisés à utiliser `/role give` et `/role remove` :\n\n"
-                f"{roles_list}"
+                f"{EMOJIS['SUCCESS']} Rôles autorisés : "
+                + ", ".join(f"<@&{rid}>" for rid in self.allowed_ids)
             ),
             color=EMBED_COLOR
         )
-        embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-        await interaction.response.edit_message(embed=embed, view=self)
+        embed2.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-    async def finish(self, interaction: discord.Interaction):
-        """Sauvegarde la configuration en base et confirme l’opération."""
-        try:
-            await role_config_collection.update_one(
-                {"_id": self.guild.id},
-                {"$set": {"roles": self.selected}},
-                upsert=True
-            )
-        except Exception:
-            embed = discord.Embed(
-                title=MESSAGES["INTERNAL_ERROR"],
-                color=EMBED_COLOR
-            )
-            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        embed = discord.Embed(
-            description=MESSAGES["ACTION_SUCCESS"],
-            color=EMBED_COLOR
-        )
-        embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        # Désactive le composant
-        for comp in self.children:
-            comp.disabled = True
-        if hasattr(self, "message"):
-            await self.message.edit(view=self)
+        # Désactive les boutons et édite le message
+        for c in self.children:
+            c.disabled = True
+        await interaction.response.edit_message(embed=embed2, view=self)
 
 
-class RoleManager(commands.Cog):
-    """Cog pour gérer la configuration et l'attribution de rôles via slash commands."""
+class RoleConfig(commands.Cog):
+    """Cog pour configurer les rôles autorisés à /rolegive et /roleremove."""
+
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    role = app_commands.Group(name="role", description="Gestion des rôles via le bot")
-
-    @role.command(
-        name="config",
-        description="Configure les rôles autorisés pour `/role give` et `/role remove`."
+    @app_commands.command(
+        name="roleconfig",
+        description="Configurer les rôles autorisés"
     )
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
-    async def config(self, interaction: discord.Interaction):
-        """Permet aux administrateurs de définir quels rôles peuvent utiliser `/role give` et `/role remove`."""
-        # Récupération de la config existante
-        try:
-            data = await role_config_collection.find_one({"_id": interaction.guild.id})
-        except Exception:
-            embed = discord.Embed(
-                title=MESSAGES["INTERNAL_ERROR"],
-                color=EMBED_COLOR
-            )
-            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
+    async def roleconfig(self, interaction: discord.Interaction):
+        # Charge la config existante
+        cfg = await role_config_collection.find_one(
+            {"guild_id": interaction.guild.id}
+        ) or {}
+        existing = cfg.get("allowed_roles", [])
 
-        current = data.get("roles", []) if data else []
-
+        view = RoleConfigView(interaction.user, existing)
         embed = discord.Embed(
-            title="🔧 Configuration des accès `/role give` & `/role remove`",
+            title="⚙️ Configuration des rôles autorisés",
             description=(
-                "Bienvenue dans la configuration des accès aux commandes `/role give` et `/role remove`.\n"
-                "Merci de sélectionner ci-dessous les rôles de votre serveur qui auront le droit d’utiliser "
-                "`/role give` et `/role remove` en plus des administrateurs.\n\n"
-                "Cliquez sur ✅ lorsque vous avez terminé votre sélection."
+                "**Rôles autorisés :** "
+                + (
+                    ", ".join(f"<@&{rid}>" for rid in existing)
+                    if existing
+                    else "❌ non définis"
+                )
+                + "\n\n1️⃣ Cliquez sur **Sélectionner** pour choisir."
             ),
             color=EMBED_COLOR
         )
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-        view = RoleConfigView(interaction.user, interaction.guild, current)
-        view.message = await interaction.response.send_message(
-            embed=embed, view=view, ephemeral=True
-        )
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        view.message = await interaction.original_response()
 
-    @role.command(
-        name="give",
-        description="Donne un rôle à un membre."
-    )
-    async def give(
-        self,
-        interaction: discord.Interaction,
-        member: discord.Member,
-        role: discord.Role
-    ):
-        """Attribue un rôle à un membre, si l’exécuteur est autorisé."""
-        # Chargement de la config
-        try:
-            data = await role_config_collection.find_one({"_id": interaction.guild.id})
-        except Exception:
+    @roleconfig.error
+    async def roleconfig_error(self, interaction: discord.Interaction, error):
+        if isinstance(error, app_commands.errors.MissingPermissions):
+            embed = discord.Embed(
+                description=MESSAGES["PERMISSION_ERROR"],
+                color=EMBED_COLOR
+            )
+            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
             embed = discord.Embed(
                 title=MESSAGES["INTERNAL_ERROR"],
                 color=EMBED_COLOR
             )
             embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        allowed = (
-            interaction.user.guild_permissions.administrator
-            or any(r.id in (data.get("roles") or []) for r in interaction.user.roles)
-        )
-        if not allowed:
-            embed = discord.Embed(
-                title=MESSAGES["PERMISSION_ERROR"],
-                color=EMBED_COLOR
-            )
-            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        # Vérification de la hiérarchie Discord
-        if interaction.user.top_role <= member.top_role:
-            embed = discord.Embed(
-                title=MESSAGES["PERMISSION_ERROR"],
-                description="🚫 Vous ne pouvez pas attribuer un rôle à un membre ayant un rôle supérieur ou égal au vôtre.",
-                color=EMBED_COLOR
-            )
-            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        # Tentative d’assignation
-        try:
-            await member.add_roles(role, reason=f"Role donné par {interaction.user}")
-        except discord.Forbidden:
-            embed = discord.Embed(
-                title=MESSAGES["BOT_PERMISSION_ERROR"],
-                color=EMBED_COLOR
-            )
-            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-        except Exception:
-            embed = discord.Embed(
-                title=MESSAGES["INTERNAL_ERROR"],
-                color=EMBED_COLOR
-            )
-            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        # Succès
-        embed = discord.Embed(
-            description=MESSAGES["ROLE_ASSIGNED"],
-            color=EMBED_COLOR
-        )
-        embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-        await interaction.response.send_message(embed=embed)
-
-    @role.command(
-        name="remove",
-        description="Retire un rôle à un membre."
-    )
-    async def remove(
-        self,
-        interaction: discord.Interaction,
-        member: discord.Member,
-        role: discord.Role
-    ):
-        """Retire un rôle à un membre, si l’exécuteur est autorisé."""
-        # Chargement de la config
-        try:
-            data = await role_config_collection.find_one({"_id": interaction.guild.id})
-        except Exception:
-            embed = discord.Embed(
-                title=MESSAGES["INTERNAL_ERROR"],
-                color=EMBED_COLOR
-            )
-            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        allowed = (
-            interaction.user.guild_permissions.administrator
-            or any(r.id in (data.get("roles") or []) for r in interaction.user.roles)
-        )
-        if not allowed:
-            embed = discord.Embed(
-                title=MESSAGES["PERMISSION_ERROR"],
-                color=EMBED_COLOR
-            )
-            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        # Vérification de la hiérarchie Discord
-        if interaction.user.top_role <= member.top_role:
-            embed = discord.Embed(
-                title=MESSAGES["PERMISSION_ERROR"],
-                description="🚫 Vous ne pouvez pas retirer un rôle à un membre ayant un rôle supérieur ou égal au vôtre.",
-                color=EMBED_COLOR
-            )
-            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        # Tentative de retrait
-        try:
-            await member.remove_roles(role, reason=f"Role retiré par {interaction.user}")
-        except discord.Forbidden:
-            embed = discord.Embed(
-                title=MESSAGES["BOT_PERMISSION_ERROR"],
-                color=EMBED_COLOR
-            )
-            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-        except Exception:
-            embed = discord.Embed(
-                title=MESSAGES["INTERNAL_ERROR"],
-                color=EMBED_COLOR
-            )
-            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        # Succès
-        embed = discord.Embed(
-            description="✅ Rôle retiré avec succès.",
-            color=EMBED_COLOR
-        )
-        embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-        await interaction.response.send_message(embed=embed)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(RoleManager(bot))
+    await bot.add_cog(RoleConfig(bot))
