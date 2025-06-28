@@ -19,12 +19,10 @@ class RoleConfigView(View):
         super().__init__(timeout=180)
         self.author = author
         self.guild = author.guild
-        # IDs des rôles déjà configurés (venant de la DB)
         self.allowed_ids: list[int] = existing or []
         self.message: discord.Message | None = None
 
     async def update_embed(self, interaction: discord.Interaction):
-        # Reconstruit l'embed pour afficher l'état actuel
         desc = (
             "**Rôles autorisés :** "
             + (
@@ -40,17 +38,16 @@ class RoleConfigView(View):
         )
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-        # Active le bouton Terminer seulement si on a au moins 1 rôle
+        # Activation du bouton Terminer
         finish_btn: Button = next(
             b for b in self.children if getattr(b, "custom_id", None) == "finish"
         )  # type: ignore
         finish_btn.disabled = not bool(self.allowed_ids)
 
-        # Édite le message
+        # Édite le message principal
         if self.message:
             await self.message.edit(embed=embed, view=self)
         else:
-            # fallback
             await interaction.response.send_message(embed=embed, view=self)
 
     async def on_timeout(self):
@@ -69,10 +66,7 @@ class RoleConfigView(View):
         emoji=EMOJIS.get("STAR", "⭐"),
         custom_id="select"
     )
-    async def _select(
-        self, interaction: discord.Interaction, button: Button
-    ):
-        # Seul l'auteur initial peut interagir
+    async def _select(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.author.id:
             return await interaction.response.send_message(
                 MESSAGES["PERMISSION_ERROR"], ephemeral=True
@@ -87,11 +81,18 @@ class RoleConfigView(View):
         )
 
         async def sel_cb(resp: discord.Interaction):
-            # On stocke les IDs et on met à jour l'embed parent
+            # Stocke les choix
             self.allowed_ids = [r.id for r in sel.values]
+
+            # Met à jour l'embed principal
             await self.update_embed(resp)
-            # On supprime le message temporaire
-            await resp.delete_original_response()
+
+            # Supprime le menu temporaire
+            try:
+                if resp.message:
+                    await resp.message.delete()
+            except Exception:
+                pass
 
         sel.callback = sel_cb
         temp.add_item(sel)
@@ -106,22 +107,20 @@ class RoleConfigView(View):
         custom_id="finish",
         disabled=True
     )
-    async def _finish(
-        self, interaction: discord.Interaction, button: Button
-    ):
+    async def _finish(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.author.id:
             return await interaction.response.send_message(
                 MESSAGES["PERMISSION_ERROR"], ephemeral=True
             )
 
-        # Sauvegarde en base MongoDB
+        # Enregistre en base
         await role_config_collection.update_one(
             {"guild_id": self.guild.id},
             {"$set": {"allowed_roles": self.allowed_ids}},
             upsert=True
         )
 
-        # Confirmation finale
+        # Embed de confirmation
         embed2 = discord.Embed(
             title=MESSAGES["ACTION_SUCCESS"],
             description=(
@@ -132,7 +131,6 @@ class RoleConfigView(View):
         )
         embed2.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-        # Désactive les boutons et édite le message
         for c in self.children:
             c.disabled = True
         await interaction.response.edit_message(embed=embed2, view=self)
@@ -151,7 +149,6 @@ class RoleConfig(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     async def roleconfig(self, interaction: discord.Interaction):
-        # Charge la config existante
         cfg = await role_config_collection.find_one(
             {"guild_id": interaction.guild.id}
         ) or {}
