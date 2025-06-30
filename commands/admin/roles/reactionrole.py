@@ -1,271 +1,153 @@
-# commands/admin/roles/reactionrole.py
-
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ui import View, Button, Modal, TextInput, Select
-from config.params import EMBED_COLOR, EMBED_FOOTER_TEXT, EMBED_FOOTER_ICON_URL
-from config.mongo import role_panels
+from discord.ui import View, Button, Modal, TextInput, RoleSelect
+from typing import List
 from datetime import datetime
+from bson import ObjectId
 
-# === Contraintes ===
-MAX_CATEGORIES = 10
-MAX_ROLES_PER_CATEGORY = 25
-MAX_LABEL_LENGTH = 100
+from config.params import EMBED_COLOR, EMBED_FOOTER_TEXT, EMBED_FOOTER_ICON_URL, MESSAGES
+from config.mongo import role_panels
 
-# --- Modals ---
+# ===== MODALS =====
+class CategoryModal(Modal, title="Nouvelle catégorie"):
+    name = TextInput(label="Nom de la catégorie", placeholder="ex: personnalité", max_length=32)
 
-class AddCategoryModal(Modal):
-    label = TextInput(label="Nom de la catégorie", max_length=MAX_LABEL_LENGTH)
-    ctype = TextInput(label="Type (exclusive/multi)", placeholder="exclusive ou multi", max_length=10)
-
-    def __init__(self, author: discord.Member):
-        super().__init__(title="➕ Ajouter une catégorie")
-        self.author = author
+    def __init__(self, guild_id: int, menu_msg_id: int):
+        super().__init__()
+        self.guild_id = guild_id
+        self.menu_msg_id = menu_msg_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user != self.author:
-            return await interaction.response.send_message("❌ Non autorisé.", ephemeral=True)
-        label = self.label.value.strip()
-        ctype = self.ctype.value.strip().lower()
-        if ctype not in ("exclusive", "multi"):
-            return await interaction.response.send_message("❌ Type invalide.", ephemeral=True)
+        name = self.name.value.strip()
+        # Limite de 5 catégories
+        count = await role_panels.count_documents({"guild_id": self.guild_id})
+        if count >= 5:
+            return await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="❌ Limite atteinte", description="5 catégories max.", color=EMBED_COLOR
+                ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL), ephemeral=True
+            )
+        # Catégorie existante ?
+        if await role_panels.find_one({"guild_id": self.guild_id, "category": name}):
+            return await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="❌ Existe déjà", description=f"**{name}** existe.", color=EMBED_COLOR
+                ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL), ephemeral=True
+            )
+        # Ajouter
+        await role_panels.insert_one({"guild_id": self.guild_id, "category": name, "roles": []})
+        # Mettre à jour menu
+        Cog = interaction.client.get_cog("PanelReaction")
+        await Cog.update_menu_embed(interaction, self.menu_msg_id)
+        await interaction.response.edit_message(content=f"✅ Catégorie **{name}** ajoutée.", view=None)
 
-        doc = await role_panels.find_one({"guild_id": interaction.guild.id})
-        cats = doc["categories"] if doc else []
-        if len(cats) >= MAX_CATEGORIES:
-            return await interaction.response.send_message(f"❌ Max {MAX_CATEGORIES} catégories.", ephemeral=True)
-
-        new_id = max((c["id"] for c in cats), default=0) + 1
-        new_cat = {"id": new_id, "label": label, "type": ctype, "roles": []}
-        if doc:
-            await role_panels.update_one({"_id": doc["_id"]}, {"$push": {"categories": new_cat}})
-        else:
-            await role_panels.insert_one({"guild_id": interaction.guild.id, "categories": [new_cat]})
-
-        await interaction.response.send_message(f"✅ Catégorie **{label}** (ID `{new_id}`) créée.", ephemeral=True)
-
-class AddRoleModal(Modal):
-    cat_id = TextInput(label="ID de la catégorie", placeholder="Ex: 1")
-    role = TextInput(label="Rôle (mention ou ID)", placeholder="<@&123...>")
-    label = TextInput(label="Libellé du bouton", max_length=MAX_LABEL_LENGTH)
-
-    def __init__(self, author: discord.Member):
-        super().__init__(title="➕ Ajouter un rôle")
-        self.author = author
+class RoleModal(Modal, title="Gestion des rôles"):
+    def __init__(self, guild_id: int, cat_id: ObjectId, menu_msg_id: int):
+        super().__init__()
+        self.guild_id = guild_id
+        self.cat_id = cat_id
+        self.menu_msg_id = menu_msg_id
+        self.add_item(RoleSelect(
+            placeholder="Sélectionnez jusqu'à 10 rôles",
+            min_values=0,
+            max_values=10,
+            custom_id="role_select"
+        ))
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user != self.author:
-            return await interaction.response.send_message("❌ Non autorisé.", ephemeral=True)
-
-        try:
-            cat_id = int(self.cat_id.value.strip())
-        except:
-            return await interaction.response.send_message("❌ Catégorie invalide.", ephemeral=True)
-
-        # récupère le rôle
-        raw = self.role.value.strip()
-        if raw.isdigit():
-            rid = int(raw)
-        elif raw.startswith("<@&") and raw.endswith(">"):
-            rid = int(raw[3:-1])
-        else:
-            return await interaction.response.send_message("❌ Format de rôle invalide.", ephemeral=True)
-
-        role_obj = interaction.guild.get_role(rid)
-        if not role_obj:
-            return await interaction.response.send_message("❌ Rôle introuvable.", ephemeral=True)
-
-        lbl = self.label.value.strip()
-        doc = await role_panels.find_one({"guild_id": interaction.guild.id})
-        cat = next((c for c in doc["categories"] if c["id"] == cat_id), None)
-        if not cat:
-            return await interaction.response.send_message("❌ Catégorie introuvable.", ephemeral=True)
-        if len(cat["roles"]) >= MAX_ROLES_PER_CATEGORY:
-            return await interaction.response.send_message(f"❌ Max {MAX_ROLES_PER_CATEGORY} rôles.", ephemeral=True)
-        if any(r["role_id"] == rid for r in cat["roles"]):
-            return await interaction.response.send_message("❌ Rôle déjà présent.", ephemeral=True)
-
+        selected: List[discord.Role] = self.children[0].values  # type: ignore
+        role_ids = [r.id for r in selected]
+        # Mise à jour
         await role_panels.update_one(
-            {"_id": doc["_id"], "categories.id": cat_id},
-            {"$push": {"categories.$.roles": {"role_id": rid, "label": lbl}}}
+            {"_id": self.cat_id}, {"$set": {"roles": role_ids}}
         )
-        await interaction.response.send_message(f"✅ Rôle **{lbl}** ajouté à cat `{cat_id}`.", ephemeral=True)
+        # Update menu
+        Cog = interaction.client.get_cog("PanelReaction")
+        await Cog.update_menu_embed(interaction, self.menu_msg_id)
+        await interaction.response.edit_message(content="✅ Rôles mis à jour.", view=None)
 
-class RemoveRoleModal(Modal):
-    cat_id = TextInput(label="ID de la catégorie", placeholder="Ex: 1")
-    role_index = TextInput(label="Index du rôle (0-based)", placeholder="Ex: 0")
+# ===== VIEWS =====
+class ConfigView(View):
+    def __init__(self, guild_id: int, menu_msg_id: int):
+        super().__init__(timeout=None)
+        self.guild_id = guild_id
+        self.menu_msg_id = menu_msg_id
+        self.refresh()
 
-    def __init__(self, author: discord.Member):
-        super().__init__(title="➖ Retirer un rôle")
-        self.author = author
+    def refresh(self):
+        self.clear_items()
+        # Bouton ajouter catégorie
+        self.add_item(Button(label="➕ Ajouter catégorie", style=discord.ButtonStyle.success, custom_id="add_cat"))
+        # Boutons catégories existantes (max 5)
+        # On va ajouter dynamiquement via callback
 
-    async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user != self.author:
-            return await interaction.response.send_message("❌ Non autorisé.", ephemeral=True)
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.guild_permissions.administrator
 
-        try:
-            cat_id = int(self.cat_id.value.strip())
-            idx = int(self.role_index.value.strip())
-        except:
-            return await interaction.response.send_message("❌ Entrée invalide.", ephemeral=True)
+    @discord.ui.button(label="➕ Ajouter catégorie", style=discord.ButtonStyle.success, custom_id="add_cat")
+    async def add_category(self, button: Button, interaction: discord.Interaction):
+        await interaction.response.send_modal(CategoryModal(self.guild_id, self.menu_msg_id))
 
-        doc = await role_panels.find_one({"guild_id": interaction.guild.id})
-        cat = next((c for c in doc["categories"] if c["id"] == cat_id), None)
-        if not cat or idx<0 or idx>=len(cat["roles"]):
-            return await interaction.response.send_message("❌ Catégorie ou index invalide.", ephemeral=True)
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
 
-        await role_panels.update_one(
-            {"_id": doc["_id"], "categories.id": cat_id},
-            {"$unset": {f"categories.$.roles.{idx}": 1}}
-        )
-        await role_panels.update_one(
-            {"_id": doc["_id"]},
-            {"$pull": {"categories.$.roles": None}}
-        )
-        await interaction.response.send_message(f"✅ Rôle à l’index `{idx}` retiré.", ephemeral=True)
+class PanelReaction(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
 
-class PublishModal(Modal):
-    channel = TextInput(label="Salon (mention ou ID)", placeholder="#général ou 123...")
+    @app_commands.command(name="panelreaction", description="Configurez votre panneau de rôles.")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def panelreaction(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        embed = await self.build_menu_embed(guild.id)
+        view = ConfigView(guild.id, None)
+        msg = await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
+        # récupérer message_id
+        sent = await interaction.original_response()
+        view.menu_msg_id = sent.id
 
-    def __init__(self, author: discord.Member):
-        super().__init__(title="📤 Publier le menu")
-        self.author = author
-
-    async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user != self.author:
-            return await interaction.response.send_message("❌ Non autorisé.", ephemeral=True)
-
-        raw = self.channel.value.strip()
-        if raw.isdigit():
-            ch = interaction.guild.get_channel(int(raw))
-        elif raw.startswith("<#") and raw.endswith(">"):
-            ch = interaction.guild.get_channel(int(raw[2:-1]))
-        else:
-            return await interaction.response.send_message("❌ Format invalide.", ephemeral=True)
-        if not ch:
-            return await interaction.response.send_message("❌ Salon introuvable.", ephemeral=True)
-
-        doc = await role_panels.find_one({"guild_id": interaction.guild.id})
-        cats = doc["categories"] if doc else []
+    async def build_menu_embed(self, guild_id: int) -> discord.Embed:
+        panels = await role_panels.find({"guild_id": guild_id}).to_list(length=5)
+        desc = ""
+        for p in panels:
+            guild = self.bot.get_guild(p["guild_id"])
+            roles = [guild.get_role(r) for r in p.get("roles", [])]
+            names = ', '.join(r.name for r in roles if r)
+            desc += f"**{p['category']}**: {names or '_aucun_'}\n"
         embed = discord.Embed(
-            title="𓈒𖥔˚｡˖ 𝐑𝐎𝐋𝐄𝐒 𝐈𝐍𝐓𝐄𝐑𝐀𝐂𝐓𝐈𝐅𝐒 ˖ ࣪⭑",
-            description="**Cliquez sur les boutons pour gérer vos rôles.**",
+            title="Panneau de catégories",
+            description=desc or "_Aucune catégorie_",
             color=EMBED_COLOR,
             timestamp=datetime.utcnow()
         )
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-        view = View(timeout=None)
-        for c in cats:
-            all_ids = [r["role_id"] for r in c["roles"]]
-            for r in c["roles"]:
-                lbl = r["label"][:MAX_LABEL_LENGTH]
-                if c["type"] == "exclusive":
-                    btn = Button(label=lbl, style=discord.ButtonStyle.secondary, custom_id=f"excl:{r['role_id']}:{','.join(map(str,all_ids))}")
-                else:
-                    btn = Button(label=lbl, style=discord.ButtonStyle.secondary, custom_id=f"multi:{r['role_id']}")
-                view.add_item(btn)
-        msg = await ch.send(embed=embed, view=view)
-        # remplacer custom_id pour inclure message_id => gestion dans listener
-        # stocker mapping emoji-less dans base
-        await role_panels.update_one(
-            {"_id": doc["_id"]},
-            {"$set": {"message_id": msg.id}}
-        )
-        await interaction.response.send_message(f"✅ Menu publié dans {ch.mention}", ephemeral=True)
+        return embed
 
-
-# --- Cog unique ---
-
-class ReactionPanel(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
-
-    @app_commands.command(name="rolesetup", description="Menu unique pour configurer et publier votre panneau")
-    @app_commands.default_permissions(manage_roles=True)
-    @app_commands.checks.has_permissions(manage_roles=True)
-    async def rolesetup(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title="⚙️ Configuration du panneau de rôles",
-            description=(
-                "Sélectionnez une action :\n"
-                "• ➕ Add category\n"
-                "• ➖ Remove category\n"
-                "• 📋 List categories\n"
-                "• ➕ Add role\n"
-                "• ➖ Remove role\n"
-                "• 📤 Publish menu"
-            ),
-            color=EMBED_COLOR
-        )
-        embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-        view = View(timeout=None)
-        view.add_item(Select(
-            placeholder="→ Choisissez une action…",
-            custom_id="main_menu",
-            options=[
-                discord.SelectOption(label="➕ Ajouter catégorie", value="add_cat"),
-                discord.SelectOption(label="➖ Supprimer catégorie", value="remove_cat"),
-                discord.SelectOption(label="📋 Lister catégories", value="list_cat"),
-                discord.SelectOption(label="➕ Ajouter rôle", value="add_role"),
-                discord.SelectOption(label="➖ Retirer rôle", value="remove_role"),
-                discord.SelectOption(label="📤 Publier le menu", value="publish"),
-            ]
-        ))
-        async def menu_callback(select, inter: discord.Interaction):
-            if inter.user != interaction.user:
-                return await inter.response.send_message("❌ Non autorisé.", ephemeral=True)
-            v = select.values[0]
-            if v == "add_cat":
-                return await inter.response.send_modal(AddCategoryModal(inter.user))
-            if v == "remove_cat":
-                return await CategorySelectView(inter.user, "remove_category").setup(inter)
-            if v == "list_cat":
-                doc = await role_panels.find_one({"guild_id": inter.guild.id})
-                cats = doc["categories"] if doc else []
-                if not cats:
-                    return await inter.response.send_message("❌ Aucune catégorie.", ephemeral=True)
-                e = discord.Embed(title="📂 Catégories", color=EMBED_COLOR)
-                for c in cats:
-                    e.add_field(name=f"{c['id']} – {c['label']}", value=f"type `{c['type']}`, rôles `{len(c['roles'])}`", inline=False)
-                e.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-                return await inter.response.send_message(embed=e, ephemeral=True)
-            if v == "add_role":
-                return await AddRoleModal(inter.user).send(inter)
-            if v == "remove_role":
-                return await RemoveRoleModal(inter.user).send(inter)
-            if v == "publish":
-                return await PublishModal(inter.user).send(inter)
-
-        view.children[0].callback = menu_callback
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    async def update_menu_embed(self, interaction: discord.Interaction, msg_id: int):
+        guild = interaction.guild
+        embed = await self.build_menu_embed(guild.id)
+        chan = interaction.channel
+        msg = await chan.fetch_message(msg_id)
+        # Reconstruire la view
+        view = ConfigView(guild.id, msg_id)
+        # Ajouter boutons catégories
+        panels = await role_panels.find({"guild_id": guild.id}).to_list(length=5)
+        for p in panels:
+            view.add_item(Button(label=p['category'], style=discord.ButtonStyle.primary,
+                                 custom_id=f"cat_{p['_id']}", row=1))
+        # Bouton gérer rôles (sera accolé)
+        # On gère callback via une commande de l'interaction
+        await msg.edit(embed=embed, view=view)
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
-        # gestion des boutons exclusifs/multi
-        if not interaction.data or interaction.data.get("component_type") != 2:
-            return
-        cid = interaction.data.get("custom_id","")
-        if ":" not in cid:
-            return
-        mode, rid, *rest = cid.split(":")
-        role_id = int(rid)
-        member = interaction.user
-        role = interaction.guild.get_role(role_id)
-        if mode == "excl":
-            all_ids = list(map(int, rest[0].split(","))) if rest else []
-            for ar in all_ids:
-                r = interaction.guild.get_role(ar)
-                if r in member.roles and ar != role_id:
-                    await member.remove_roles(r)
-        if role in member.roles:
-            await member.remove_roles(role)
-            msg = f"❌ {role.name} retiré."
-        else:
-            await member.add_roles(role)
-            msg = f"✅ {role.name} attribué."
-        await interaction.response.send_message(msg, ephemeral=True)
-
+        custom_id = interaction.data.get('custom_id', '')
+        if custom_id.startswith('cat_'):
+            # Gérer rôles pour cette catégorie
+            cat_id = ObjectId(custom_id.split('_',1)[1])
+            await interaction.response.send_modal(RoleModal(interaction.guild.id, cat_id, interaction.message.id))
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(ReactionPanel(bot))
+    await bot.add_cog(PanelReaction(bot))
