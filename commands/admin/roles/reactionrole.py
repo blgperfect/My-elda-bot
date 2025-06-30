@@ -172,7 +172,6 @@ class ConfigView(View):
         ]
     )
     async def cfg_menu(self, interaction: discord.Interaction, select: Select):
-        # Vérifie que l'utilisateur est bien l'auteur de la configuration
         if interaction.user != self.author:
             return await interaction.response.send_message(
                 MESSAGES["PERMISSION_ERROR"], ephemeral=True
@@ -207,46 +206,43 @@ class ConfigView(View):
             )
         await self.cog.finalize_panel(self.guild_id, interaction)
 
-    # ... (reste du code identique, aucune autre modification nécessaire)
-
-
     async def open_role_select(self, interaction: discord.Interaction):
         sess = self.cog.sessions[self.guild_id]
-        opts = [discord.SelectOption(label=c, value=c) for c in sess["categories"]]
+        options = [discord.SelectOption(label=c, value=c) for c in sess["categories"]]
 
         class CatSel(Select):
-            def __init__(self_inner):
+            def __init__(sel):
                 super().__init__(
                     placeholder="Catégorie…",
                     min_values=1, max_values=1,
-                    options=opts,
+                    options=options,
                     custom_id="add_role_cat"
                 )
+
             async def callback(sel, inner: discord.Interaction):
                 cat = sel.values[0]
-                role_sel = RoleSelect(
+                role_selector = RoleSelect(
                     placeholder=f"Rôles pour {cat}",
                     min_values=1, max_values=10
                 )
-                async def on_roles(resp: discord.Interaction):
-                    ss = self_inner.parent_view = self
+                async def role_callback(resp: discord.Interaction):
                     ss = self.cog.sessions[self.guild_id]
-                    ss["roles"][cat] = [r.id for r in role_sel.values]  # type: ignore
+                    ss["roles"][cat] = [r.id for r in role_selector.values]
                     await self.update_embed(resp)
                     await resp.delete_original_response()
-                role_sel.callback = on_roles
+                role_selector.callback = role_callback
                 v2 = View(timeout=None)
-                v2.add_item(role_sel)
+                v2.add_item(role_selector)
                 await inner.response.send_message(
                     f"Choisissez jusqu’à 10 rôles pour **{cat}**",
                     view=v2,
                     ephemeral=True
                 )
 
-        v0 = View(timeout=None)
-        v0.add_item(CatSel())
+        v = View(timeout=None)
+        v.add_item(CatSel())
         await interaction.response.send_message(
-            "Sélectionnez catégorie :", view=v0, ephemeral=True
+            "Sélectionnez catégorie :", view=v, ephemeral=True
         )
 
     async def open_remove_cat(self, interaction: discord.Interaction):
@@ -262,27 +258,29 @@ class ConfigView(View):
         opts = [discord.SelectOption(label=c, value=c) for c in sess["categories"]]
 
         class CSel(Select):
-            def __init__(self_inner):
+            def __init__(sel):
                 super().__init__(
                     placeholder="Catégorie…",
                     min_values=1, max_values=1,
                     options=opts,
                     custom_id="rem_role_cat"
                 )
+
             async def callback(sel, inner: discord.Interaction):
-                rsel = RolesRemoveSelect(self, sel.values[0])
+                category = sel.values[0]
+                rsel = RolesRemoveSelect(self, category)
                 v2 = View(timeout=None)
                 v2.add_item(rsel)
                 await inner.response.send_message(
-                    f"Rôles à retirer de **{sel.values[0]}** :",
+                    f"Rôles à retirer de **{category}** :",
                     view=v2,
                     ephemeral=True
                 )
 
-        v0 = View(timeout=None)
-        v0.add_item(CSel())
+        v = View(timeout=None)
+        v.add_item(CSel())
         await interaction.response.send_message(
-            "Sélectionnez catégorie :", view=v0, ephemeral=True
+            "Sélectionnez catégorie :", view=v, ephemeral=True
         )
 
     async def update_embed(self, interaction: discord.Interaction):
@@ -295,7 +293,6 @@ class ConfigView(View):
         if sess.get("panel_image_url"):
             embed.set_image(url=sess["panel_image_url"])
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-        # Réinitialise les fields
         embed.clear_fields()
         for cat in sess["categories"]:
             vals = sess["roles"].get(cat, [])
@@ -306,6 +303,7 @@ class ConfigView(View):
             )
         if self.message:
             await self.message.edit(embed=embed, view=self)
+            await interaction.response.defer()
         else:
             await interaction.response.defer()
 
@@ -460,10 +458,7 @@ class ReactionRole(commands.Cog):
             doc = await role_panel_collection.find_one({"guild_id": guild})
             has_panel = bool(doc)
             view = MainView(interaction.user, self, has_panel)
-            if has_panel:
-                desc = f"Vous avez déjà un panneau dans <#{doc['channel_id']}>:{doc['message_id']}"
-            else:
-                desc = "Créez un nouveau panneau."
+            desc = f"Vous avez déjà un panneau dans <#{doc['channel_id']}>\:{doc['message_id']}" if has_panel else "Créez un nouveau panneau."
             embed = discord.Embed(
                 title="Configuration panneau de rôles",
                 description=desc,
@@ -490,7 +485,6 @@ class ReactionRole(commands.Cog):
 
     async def finalize_panel(self, guild_id: int, interaction: discord.Interaction):
         sess = self.sessions[guild_id]
-        # Embed public
         embed_pub = discord.Embed(
             title=sess["panel_title"],
             description=sess["panel_desc"],
@@ -505,11 +499,9 @@ class ReactionRole(commands.Cog):
                 value=", ".join(f"<@&{r}>" for r in vals) or "_(vide)_",
                 inline=False
             )
-        # View public
         public_view = View(timeout=None)
         for cat in sess["categories"]:
             public_view.add_item(CategoryButton(cat))
-        # Send
         msg = await interaction.channel.send(embed=embed_pub, view=public_view)
         data = {
             "guild_id": guild_id,
