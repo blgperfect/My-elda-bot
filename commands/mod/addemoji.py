@@ -1,5 +1,5 @@
 # commands/mod/addemoji.py
-
+# code complété.
 import re
 import aiohttp
 import discord

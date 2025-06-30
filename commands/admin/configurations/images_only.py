@@ -1,5 +1,5 @@
 #Commande validé et terminé, cette commande sert a envoyé uniquement des images 
-#dans des salon spécifique.
+#dans des salon spécifique..
 
 import discord
 from discord import app_commands

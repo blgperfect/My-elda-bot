@@ -1,4 +1,5 @@
 # commands/avatar.py
+# je considere ce code comme complet
 import discord
 from discord import app_commands
 from discord.ext import commands

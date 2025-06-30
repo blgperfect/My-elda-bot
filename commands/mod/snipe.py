@@ -1,6 +1,6 @@
 #ce code sert a récupéré le dernier message supprimé d'un salon. c'est quand meme
 # utiles si vous n'aviez pas programé de log pour sa.
-
+# je juge ce code complété.
 import datetime
 import discord
 from discord import app_commands

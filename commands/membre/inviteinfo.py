@@ -1,5 +1,5 @@
 # commands/admin/inviteinfo.py
-
+#code complété : possibilité de mettre pour administrateur seulement.(ou role choisi.)
 import re
 import discord
 from discord import app_commands

@@ -1,5 +1,5 @@
 # commands/admin/soutien_scan.py
-
+# complété
 import discord
 from discord.ext import commands
 from config.mongo import soutien_collection
