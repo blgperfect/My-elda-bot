@@ -1,11 +1,9 @@
-probleme rencontré dans ce code
-
-
-a savoir limite
-max 5 categorie
-max 10 role par categoorie
-1. Le bot ne semble pas se souvenir de mes configuration (elle n'apparaisse pas dans l'embed si je refait la commande )
-2. Quand je doois ajouté une categorie je dois le faire une a la fois, je devrais pourvoir en rentrer 5 meme si jen rentre juste une au moin 5 option devrais etre dans le modale,
-3. et donc le panneau des roles devrais ressembler a sa : 
-Panneau des roles -> bouton ( ici lees 5 categorie ou moin) categorie 1 = les choix de roles, categorie 2 = choix de roles, tu me suis ?
-4. s'assuré que la commande fonctionne uniquement pour ceux qui on la perm de géré les roles.
+CHANGEMENT A OPÉÉRÉ.
+1. ne plus épeingler le message.
+2. faire des validation lorsque un role a été attribué/retiré.// pour les erreur aussi
+3. lorsque je refait role setup , les configuration précedente ne sont plus affiché dans l'embed.
+4. L'option modifier je ne veux pas qu'elle serve a sa , elle doit montrer le panneau (ccelui qui apparais quand on fait envoyer le panneau) et se changer dynamiquement selon les modification de l'utulisateur , il doit pouvoir reconfiguré le titre, la description , ajouté une image(url) , la couleur, ajouté retirer supprimer role/categorie.
+tu me suis ? j'ai besoin d'un code complet!
+5. Le message par defaut quand le panneau est envoyer ca doit etre simplement sa dans la description : Veuillez sééelectionné vos role en appuyant sur les bouton.
+6. prévoir les maximum de caractere pour chaque truc du code
+7. t'assuré que tout est complet et rien n'Est oublier 
