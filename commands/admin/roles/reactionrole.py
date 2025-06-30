@@ -76,17 +76,27 @@ class ConfigView(View):
         self.refresh()
 
     def refresh(self):
+        # clear only category buttons (custom_id starts with 'cat_')
+        new_children = []
+        for item in self.children:
+            cid = getattr(item, 'custom_id', '')
+            if not cid.startswith('cat_'):
+                new_children.append(item)
         self.clear_items()
-        # Bouton ajouter catégorie
-        self.add_item(Button(label="➕ Ajouter catégorie", style=discord.ButtonStyle.success, custom_id="add_cat"))
-        # Boutons catégories existantes (max 5)
-        # On va ajouter dynamiquement via callback
+        for item in new_children:
+            self.add_item(item)
+        # add 'Ajouter catégorie' button with callback
+        btn = Button(label="➕ Ajouter catégorie", style=discord.ButtonStyle.success, custom_id="add_cat")
+        btn.callback = self.add_category
+        self.add_item(btn)
+        # add existing category buttons
+        # will be refreshed later in update_menu_embed
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return interaction.user.guild_permissions.administrator
 
-    @discord.ui.button(label="➕ Ajouter catégorie", style=discord.ButtonStyle.success, custom_id="add_cat")
-    async def add_category(self, button: Button, interaction: discord.Interaction):
+    async def add_category(self, interaction: discord.Interaction):
+        # open modal
         await interaction.response.send_modal(CategoryModal(self.guild_id, self.menu_msg_id))
 
     async def on_timeout(self):
