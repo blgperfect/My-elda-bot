@@ -1,3 +1,4 @@
+
 import re
 import traceback
 
@@ -73,7 +74,7 @@ class ColorModal(Modal, title="Modifier la couleur du panneau"):
         if not re.fullmatch(r"[0-9A-Fa-f]{6}", raw):
             return await interaction.response.send_message("Couleur invalide.", ephemeral=True)
         sess = self.parent_view.cog.sessions[self.parent_view.guild_id]
-        sess["panel_color"] = discord.Color(int(raw, 16))
+        sess["panel_color"] = int(raw, 16)
         await self.parent_view.update_embed(interaction)
 
 class CategoryModal(Modal, title="Ajouter jusqu’à 5 catégories"):
@@ -288,7 +289,7 @@ class ConfigView(View):
         embed = discord.Embed(
             title=sess["panel_title"],
             description=sess["panel_desc"],
-            color=sess["panel_color"]
+            color=discord.Color(sess["panel_color"]) if isinstance(sess["panel_color"], int) else sess["panel_color"]
         )
         if sess.get("panel_image_url"):
             embed.set_image(url=sess["panel_image_url"])
@@ -384,7 +385,7 @@ class MainView(View):
             "panel_title": "📜 Panneau de rôles",
             "panel_desc": "Veuillez sélectionner vos rôles en appuyant sur les boutons.",
             "panel_image_url": None,
-            "panel_color": EMBED_COLOR,
+            "panel_color": EMBED_COLOR.value if isinstance(EMBED_COLOR, discord.Color) else EMBED_COLOR,
             "action": "create"
         }
         view = ConfigView(self.author, self.cog, guild)
@@ -410,7 +411,7 @@ class MainView(View):
             "panel_title": doc.get("title", "📜 Panneau de rôles"),
             "panel_desc": doc.get("description", "Veuillez sélectionner vos rôles en appuyant sur les boutons."),
             "panel_image_url": doc.get("image_url"),
-            "panel_color": discord.Color(int(doc.get("color", f"{EMBED_COLOR.value:06x}"), 16)),
+            "panel_color": int(doc.get("color", f"{EMBED_COLOR.value:06x}"), 16),
             "action": "modify"
         }
         self.cog.sessions[guild] = sess
@@ -418,7 +419,7 @@ class MainView(View):
         embed = discord.Embed(
             title=sess["panel_title"],
             description=sess["panel_desc"],
-            color=sess["panel_color"]
+            color=discord.Color(sess["panel_color"])
         )
         if sess.get("panel_image_url"):
             embed.set_image(url=sess["panel_image_url"])
@@ -458,7 +459,10 @@ class ReactionRole(commands.Cog):
             doc = await role_panel_collection.find_one({"guild_id": guild})
             has_panel = bool(doc)
             view = MainView(interaction.user, self, has_panel)
-            desc = f"Vous avez déjà un panneau dans <#{doc['channel_id']}>\:{doc['message_id']}" if has_panel else "Créez un nouveau panneau."
+            if has_panel:
+                desc = f"Vous avez déjà un panneau dans <#{doc['channel_id']}>:{doc['message_id']}"
+            else:
+                desc = "Créez un nouveau panneau."
             embed = discord.Embed(
                 title="Configuration panneau de rôles",
                 description=desc,
@@ -485,24 +489,23 @@ class ReactionRole(commands.Cog):
 
     async def finalize_panel(self, guild_id: int, interaction: discord.Interaction):
         sess = self.sessions[guild_id]
+        # Embed public (sans listing catégories/mentions)
         embed_pub = discord.Embed(
             title=sess["panel_title"],
             description=sess["panel_desc"],
-            color=sess["panel_color"]
+            color=discord.Color(sess["panel_color"])
         )
         if sess.get("panel_image_url"):
             embed_pub.set_image(url=sess["panel_image_url"])
-        for cat in sess["categories"]:
-            vals = sess["roles"].get(cat, [])
-            embed_pub.add_field(
-                name=cat,
-                value=", ".join(f"<@&{r}>" for r in vals) or "_(vide)_",
-                inline=False
-            )
+        embed_pub.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
+        # View public avec boutons
         public_view = View(timeout=None)
         for cat in sess["categories"]:
             public_view.add_item(CategoryButton(cat))
+        # Envoi
         msg = await interaction.channel.send(embed=embed_pub, view=public_view)
+        # Prépare données pour la DB
+        color_val = sess["panel_color"]
         data = {
             "guild_id": guild_id,
             "channel_id": interaction.channel.id,
@@ -510,7 +513,7 @@ class ReactionRole(commands.Cog):
             "title": sess["panel_title"],
             "description": sess["panel_desc"],
             "image_url": sess.get("panel_image_url"),
-            "color": f"{sess['panel_color'].value:06x}",
+            "color": f"{color_val:06x}",
             "categories": [{"name": c, "roles": sess["roles"][c]} for c in sess["categories"]],
         }
         if sess["action"] == "create":
