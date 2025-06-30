@@ -15,44 +15,54 @@ from config.params import (
 from config.mongo import role_panel_collection
 
 
-class CategoryModal(Modal, title="Ajouter une catégorie"):
-    """Modal pour saisir le nom d'une nouvelle catégorie."""
-    name = TextInput(label="Nom de la catégorie", max_length=50)
+class CategoryModal(Modal, title="Ajouter jusqu’à 5 catégories"):
+    cat1 = TextInput(label="Catégorie #1", max_length=50, required=False)
+    cat2 = TextInput(label="Catégorie #2", max_length=50, required=False)
+    cat3 = TextInput(label="Catégorie #3", max_length=50, required=False)
+    cat4 = TextInput(label="Catégorie #4", max_length=50, required=False)
+    cat5 = TextInput(label="Catégorie #5", max_length=50, required=False)
 
     def __init__(self, parent_view: "SetupView"):
         super().__init__()
-        self.parent_view = parent_view
+        self.parent_view = parent_view  # pour accéder à cog & guild_id
 
     async def on_submit(self, interaction: discord.Interaction):
         sess = self.parent_view.cog.sessions[self.parent_view.guild_id]
-        val = self.name.value.strip()
-        if val and val not in sess["categories"]:
-            sess["categories"].append(val)
-            sess["roles"][val] = []
+        # Ajoute jusqu'à 5 nouvelles catégories non-vides et uniques
+        for val in (
+            self.cat1.value.strip(),
+            self.cat2.value.strip(),
+            self.cat3.value.strip(),
+            self.cat4.value.strip(),
+            self.cat5.value.strip(),
+        ):
+            if val and val not in sess["categories"] and len(sess["categories"]) < 5:
+                sess["categories"].append(val)
+                sess["roles"][val] = []
         await self.parent_view.update_embed(interaction)
 
 
 class SetupView(View):
-    """View privée pour gérer l'assistant pas-à-pas."""
+    """View privée pour l’assistant pas-à-pas."""
     def __init__(self, author: discord.Member, cog: commands.Cog, guild_id: int):
         super().__init__(timeout=180)
         self.author = author
         self.cog = cog
         self.guild_id = guild_id
         self.message: discord.Message | None = None
-        self._update_buttons()  # initialise l'état des boutons
+        self._update_buttons()
 
     def _update_buttons(self):
         sess = self.cog.sessions[self.guild_id]
         for btn in self.children:
             cid = getattr(btn, "custom_id", "")
             if cid == "category":
-                btn.disabled = len(sess["categories"]) >= 5 or sess["action"] != "create"
+                btn.disabled = sess["action"] != "create" or len(sess["categories"]) >= 5
             elif cid == "roles":
-                btn.disabled = not sess["categories"] or sess["action"] != "create"
+                btn.disabled = sess["action"] != "create" or not sess["categories"]
             elif cid == "finish":
                 incomplete = any(not sess["roles"].get(cat) for cat in sess["categories"])
-                btn.disabled = not sess["categories"] or incomplete or sess["action"] != "create"
+                btn.disabled = sess["action"] != "create" or not sess["categories"] or incomplete
             elif cid == "modify":
                 btn.disabled = sess["action"] != "modify"
             elif cid == "delete":
@@ -89,7 +99,7 @@ class SetupView(View):
             await self.message.edit(content="⏱️ Configuration expirée.", view=self)
 
     @discord.ui.button(
-        label="➕ Ajouter catégorie",
+        label="➕ Ajouter catégories",
         style=discord.ButtonStyle.primary,
         emoji=EMOJIS.get("PLUS", "➕"),
         custom_id="category",
@@ -108,35 +118,34 @@ class SetupView(View):
     async def _roles(self, interaction: discord.Interaction, button: Button):
         if interaction.user != self.author:
             return await interaction.response.send_message(MESSAGES["PERMISSION_ERROR"], ephemeral=True)
-        parent_view = self
-        sess = self.cog.sessions[self.guild_id]
+
+        parent = self  # capture pour la closure
+        sess = parent.cog.sessions[parent.guild_id]
         options = [discord.SelectOption(label=c, value=c) for c in sess["categories"]]
 
         class CatSelect(Select):
-            def __init__(self):
+            def __init__(sel):
                 super().__init__(
                     placeholder="Sélectionnez une catégorie…",
                     min_values=1, max_values=1,
                     options=options,
                 )
 
-            async def callback(self, inner: discord.Interaction):
-                cat = self.values[0]
-                v2 = View(timeout=60)
-                v2.parent_view = parent_view
+            async def callback(sel, inner: discord.Interaction):
+                cat = sel.values[0]
+                # RoleSelect sur 10 rôles max
                 role_sel = RoleSelect(
                     placeholder=f"Rôles pour {cat}", min_values=1, max_values=10
                 )
 
-                async def role_cb(resp: discord.Interaction):
-                    pv = v2.parent_view
-                    sess2 = pv.cog.sessions[pv.guild_id]
-                    # type: ignore on values since RoleSelect.values is List[Role]
-                    sess2["roles"][cat] = [r.id for r in role_sel.values]  
-                    await pv.update_embed(resp)
+                async def on_roles(resp: discord.Interaction):
+                    sess2 = parent.cog.sessions[parent.guild_id]
+                    sess2["roles"][cat] = [r.id for r in role_sel.values]  # type: ignore
+                    await parent.update_embed(resp)
                     await resp.delete_original_response()
 
-                role_sel.callback = role_cb
+                role_sel.callback = on_roles
+                v2 = View(timeout=180)
                 v2.add_item(role_sel)
                 await inner.response.send_message(
                     f"Choisissez jusqu’à 10 rôles pour **{cat}**",
@@ -144,10 +153,12 @@ class SetupView(View):
                     ephemeral=True
                 )
 
-        v = View(timeout=60)
+        v = View(timeout=180)
         v.add_item(CatSelect())
         await interaction.response.send_message(
-            "Sélectionnez la catégorie à configurer :", view=v, ephemeral=True
+            "Sélectionnez la catégorie à configurer :",
+            view=v,
+            ephemeral=True
         )
 
     @discord.ui.button(
@@ -182,122 +193,114 @@ class SetupView(View):
 
 
 class ReactionRole(commands.Cog):
-    """Cog pour /rolesetup → création, modification et suppression d’un panneau de rôles."""
+    """Cog pour /rolesetup → création/modification/suppression d’un panneau de rôles."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.sessions: dict[int, dict] = {}
 
     @app_commands.command(
         name="rolesetup",
-        description="Créer un panneau de rôles interactif"
+        description="Créer ou modifier un panneau de rôles interactif"
     )
-    @app_commands.default_permissions(administrator=True)
+    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def rolesetup(self, interaction: discord.Interaction):
         guild_id = interaction.guild_id
+        # Si un panneau existe déjà, mode "modify"
+        doc = await role_panel_collection.find_one({"guild_id": guild_id})
+        if doc:
+            cats = [c["name"] for c in doc["categories"]]
+            roles = {c["name"]: c["roles"] for c in doc["categories"]}
+            action = "modify"
+        else:
+            cats, roles, action = [], {}, "create"
+
         self.sessions[guild_id] = {
-            "action": "create",
-            "categories": [],
-            "roles": {},
+            "action": action,
+            "categories": cats,
+            "roles": roles,
             "view": None,
-            "panel_ch": None,
-            "panel_msg": None,
+            "panel_ch": doc["channel_id"] if doc else None,
+            "panel_msg": doc["message_id"] if doc else None,
         }
         view = SetupView(interaction.user, self, guild_id)
         self.sessions[guild_id]["view"] = view
 
-        embed = discord.Embed(
-            title="⚙️ Configuration du panneau de rôles",
-            description="Aucune catégorie définie pour l’instant",
-            color=EMBED_COLOR
-        ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
+        title = "♻️ Modification du panneau" if action == "modify" else "⚙️ Configuration du panneau"
+        desc = "Ajustez catégories et rôles ci-dessous" if action == "modify" else "Aucune catégorie définie pour l’instant"
+        color = discord.Color.orange() if action == "modify" else EMBED_COLOR
+
+        embed = discord.Embed(title=title, description=desc, color=color)
+        embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         view.message = await interaction.original_response()
+
+    @rolesetup.error
+    async def rolesetup_error(self, interaction: discord.Interaction, error):
+        if isinstance(error, app_commands.MissingPermissions):
+            embed = discord.Embed(
+                title=MESSAGES["PERMISSION_ERROR"],
+                description="Vous devez avoir la permission **Gérer les rôles**.",
+                color=EMBED_COLOR
+            ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            embed = discord.Embed(
+                title=MESSAGES["INTERNAL_ERROR"],
+                color=EMBED_COLOR
+            ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
     async def finalize_panel(self, guild_id: int, interaction: discord.Interaction):
         sess = self.sessions[guild_id]
         # Embed public
-        embed = discord.Embed(
+        embed_pub = discord.Embed(
             title="📜 Panneau de rôles",
-            description="Cliquez sur un bouton pour toggler vos rôles !",
+            description="Cliquez pour toggler vos rôles !",
             color=discord.Color.blue()
         )
         for cat in sess["categories"]:
-            mention = (
-                " ".join(f"<@&{rid}>" for rid in sess["roles"].get(cat, []))
-                or "_(vide)_"
-            )
-            embed.add_field(name=cat, value=mention, inline=False)
+            mention = " ".join(f"<@&{rid}>" for rid in sess["roles"].get(cat, [])) or "_(vide)_"
+            embed_pub.add_field(name=cat, value=mention, inline=False)
 
         public_view = View(timeout=None)
         for cat in sess["categories"]:
-            btn = Button(
-                label=cat,
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"toggle_{cat}"
-            )
-            public_view.add_item(btn)
+            public_view.add_item(Button(label=cat, style=discord.ButtonStyle.secondary, custom_id=f"toggle_{cat}"))
 
-        channel = interaction.channel  # type: ignore
-        msg = await channel.send(embed=embed, view=public_view)
+        ch = interaction.channel  # type: ignore
+        msg = await ch.send(embed=embed_pub, view=public_view)
         await msg.pin()
 
-        await role_panel_collection.insert_one({
+        data = {
             "guild_id": guild_id,
-            "channel_id": channel.id,
+            "channel_id": ch.id,
             "message_id": msg.id,
-            "categories": [
-                {"name": c, "roles": sess["roles"][c]}
-                for c in sess["categories"]
-            ]
-        })
+            "categories": [{"name": c, "roles": sess["roles"][c]} for c in sess["categories"]],
+        }
+        if sess["action"] == "modify":
+            await role_panel_collection.update_one({"guild_id": guild_id}, {"$set": data})
+            await interaction.response.send_message("✅ Panneau mis à jour.", ephemeral=True)
+        else:
+            await role_panel_collection.insert_one(data)
+            sess["action"] = "modify"
+            sess["panel_ch"] = ch.id
+            sess["panel_msg"] = msg.id
+            await interaction.response.send_message("✅ Panneau envoyé et épinglé.", ephemeral=True)
 
-        sess["action"] = "modify"
-        sess["panel_ch"] = channel.id
-        sess["panel_msg"] = msg.id
-
-        await interaction.response.send_message("✅ Panneau envoyé et épinglé.", ephemeral=True)
-        # Mise à jour de la view privée
+        # Rafraîchir la view privée
         await sess["view"].update_embed(interaction)
 
     async def start_modify(self, interaction: discord.Interaction):
-        guild_id = interaction.guild_id
-        doc = await role_panel_collection.find_one({"guild_id": guild_id})
-        if not doc:
-            return await interaction.response.send_message(
-                MESSAGES["NOT_FOUND_PANEL"], ephemeral=True
-            )
-
-        cats = [c["name"] for c in doc["categories"]]
-        roles = {c["name"]: c["roles"] for c in doc["categories"]}
-        view = SetupView(interaction.user, self, guild_id)
-        self.sessions[guild_id] = {
-            "action": "modify",
-            "categories": cats,
-            "roles": roles,
-            "view": view,
-            "panel_ch": doc["channel_id"],
-            "panel_msg": doc["message_id"],
-        }
-
-        embed = discord.Embed(
-            title="♻️ Modification du panneau",
-            description="Ajustez catégories et rôles ci-dessous",
-            color=discord.Color.orange()
-        ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-        view.message = await interaction.original_response()
+        # Relance rolesetup en mode modify
+        await self.rolesetup.callback(self, interaction)  # réutilise la même logique
 
     async def delete_panel(self, interaction: discord.Interaction):
         guild_id = interaction.guild_id
         sess = self.sessions.get(guild_id)
         if not sess or sess["action"] != "modify":
-            return await interaction.response.send_message(
-                MESSAGES["NOT_FOUND_PANEL"], ephemeral=True
-            )
+            return await interaction.response.send_message(MESSAGES["NOT_FOUND_PANEL"], ephemeral=True)
 
-        # Désépingler le message public
         ch = self.bot.get_channel(sess["panel_ch"])  # type: ignore
         if ch:
             try:
@@ -309,12 +312,10 @@ class ReactionRole(commands.Cog):
         await role_panel_collection.delete_one({"guild_id": guild_id})
 
         # Désactiver la view privée
-        for c in sess["view"].children:
-            c.disabled = True
+        for btn in sess["view"].children:
+            btn.disabled = True
         if sess["view"].message:
-            await sess["view"].message.edit(
-                content="🗑️ Panneau supprimé.", view=sess["view"]
-            )
+            await sess["view"].message.edit(content="🗑️ Panneau supprimé.", view=sess["view"])
 
         self.sessions.pop(guild_id)
         await interaction.response.send_message("🗑️ Configuration supprimée.", ephemeral=True)
