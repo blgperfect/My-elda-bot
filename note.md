@@ -1,19 +1,13 @@
-Peux tu maintenant me faire un message qui s'envoie quand le bot rejoint un server(ce fait ajouté) (si un salon est disponible pour que le bot puisse envoyé un message!) et tu envoie ce meme message en privé aussi au membre
 
 
-le message -> en embed reprend les info de params pour sa.
-
-titre : Merci de m'avoir ajouté sur (ici le nom du server)
-description : 
-Je m'appelle elda , je tien mon nom de ma bonne amie elda.moonwraith mais j'ai été concu par xxmissr.
-Tout d'abbord sachez que pour plusieurs de mes commande je n'écessite d'etre le plus haut possible dans vos  roles! 
-
-
-Nous vous conseillons de vous créer un salon appellé sanction , pour utulisé nos commande que ce sois role give , kick , ban , puisqu'il apparaisse. Nous avons privilegié ceci plustot que de créer des log.
-a suivre eventuellement la je manque d'idée
-
-petit tips : pour la commande /addemoji vous n'avez pas besoin de nitro pour le faire trouver le moyen de copier le message qui contient l'emoji et collé le ! 
-
-
-
-
+1. Quel est le comportement attendu de la commande ?
+2. La signature (nom, arguments et types) est-elle clairement définie ?
+3. Le code valide-t-il correctement les arguments avant exécution ?
+4. La gestion des erreurs renvoie-t-elle des messages explicites en cas de problème ?
+5. Les permissions utilisateur sont-elles vérifiées avant l’exécution ?
+6. La commande utilise-t-elle correctement async/await pour éviter tout blocage ?
+7. Le code est-il protégé contre les injections ou abus des utilisateurs ?
+8. Des tests unitaires couvrent-ils les cas d’usage et les erreurs potentielles ?
+9. La documentation (docstring et description) de la commande est-elle à jour ?
+10. La configuration mongo.db est t'elle concu pour se réinitialisé apres que le bot est été expulsé d'un server ? ou concerve t'elle c'est donné?
+11. note la commande sur 10 
