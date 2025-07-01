@@ -267,8 +267,12 @@ class AcceptRejectView(discord.ui.View):
             return await interaction.response.send_message("❌ Non autorisé.", ephemeral=True)
         owner = await self.bot.fetch_user(self.owner_id)
         liker = await self.bot.fetch_user(self.liker_id)
-        await liker.create_dm().send(f"✅ **{owner.display_name}** a accepté votre like.")
-        await owner.create_dm().send(f"✅ Vous avez accepté le like de {liker.display_name}.")
+        # Create DM channels and send messages
+        owner_dm = await owner.create_dm()
+        liker_dm = await liker.create_dm()
+        await liker_dm.send(f"✅ **{owner.display_name}** a accepté votre like.")
+        await owner_dm.send(f"✅ Vous avez accepté le like de {liker.display_name}.")
+        # Disable buttons
         for child in self.children:
             child.disabled = True
         await interaction.message.edit(view=self)
