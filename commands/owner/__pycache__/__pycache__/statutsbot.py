@@ -37,5 +37,20 @@ class StatusCog(commands.Cog):
             f"✅ Nouveau statut : « {elda.STATUS_MESSAGE} »", ephemeral=True
         )
 
+    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        """Gestion des erreurs pour les commandes de ce cog."""
+        if isinstance(error, app_commands.CheckFailure):
+            # Permission refusée
+            await interaction.response.send_message(
+                "❌ Vous n'avez pas la permission d'utiliser cette commande.",
+                ephemeral=True
+            )
+        else:
+            # Autres erreurs
+            await interaction.response.send_message(
+                f"❌ Une erreur est survenue : {error}",
+                ephemeral=True
+            )
+
 async def setup(bot: commands.Bot):
     await bot.add_cog(StatusCog(bot))
