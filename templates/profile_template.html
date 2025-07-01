@@ -2,13 +2,14 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Profil Meet &amp; Friendly</title>
+  <title>Profil Meet & Friendly</title>
   <style>
     body {
       margin: 0;
       padding: 0;
-      font-family: Arial, sans-serif;
-      background-color: #f5f5f5;
+      font-family: "Segoe UI", sans-serif;
+      /* Fond dégradé automne */
+      background: linear-gradient(135deg, #FFBD66, #FF686B);
       width: 600px;
       height: 350px;
       display: flex;
@@ -19,11 +20,13 @@
       position: relative;
       width: 550px;
       height: 300px;
-      background: #ffffff;
+      /* Arrière-plan semi-transparent + texture légère */
+      background: rgba(255, 255, 255, 0.9);
       border-radius: 16px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
       padding: 20px;
       box-sizing: border-box;
+      backdrop-filter: blur(4px);
     }
     .avatar {
       position: absolute;
@@ -31,14 +34,14 @@
       right: 20px;
       width: 100px;
       height: 100px;
-      border-radius: 12px;
+      border-radius: 50%;
       object-fit: cover;
-      border: 2px solid #dddddd;
+      border: 3px solid #fff;
       background-color: #e0e0e0;
     }
     .fields {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(2, 1fr);
       grid-row-gap: 12px;
       grid-column-gap: 20px;
       margin-top: 10px;
@@ -49,32 +52,33 @@
     }
     .label {
       font-size: 0.85rem;
-      color: #666666;
-      margin-bottom: 2px;
+      color: #555;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     .value {
       font-size: 1.1rem;
       font-weight: 600;
-      color: #333333;
+      color: #333;
     }
     .description {
       grid-column: span 2;
       margin-top: 16px;
     }
-    .description .label { margin-bottom: 4px; }
+    .description .label {
+      margin-bottom: 6px;
+    }
   </style>
 </head>
 <body>
   <div class="card">
-    <!-- Avatar -->
     <img
       class="avatar"
       src="{{ avatar_url }}"
       alt="Avatar"
-      onerror="this.src='https://via.placeholder.com/100?text=?';"
+      onerror="this.src='https://via.placeholder.com/100';"
     />
-
-    <!-- Champs du profil -->
     <div class="fields">
       <div class="field">
         <span class="label">Surnom</span>
@@ -96,8 +100,6 @@
         <span class="label">Anniversaire</span>
         <span class="value">{{ birthday or 'inconnu' }}</span>
       </div>
-
-      <!-- Description -->
       <div class="field description">
         <span class="label">Description</span>
         <span class="value">{{ description or 'aucune' }}</span>
