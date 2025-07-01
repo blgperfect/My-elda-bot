@@ -48,6 +48,7 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
     duree   = TextInput(label="Durée (m,h,d,w)", required=True, placeholder="ex: 10m")
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Validation des inputs
         try:
             winners_count = int(self.winners.value)
             if winners_count < 1:
@@ -72,8 +73,9 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
             "participants": []
         }
 
+        # Demande du label
         await interaction.response.send_message(
-            f"{interaction.user.mention}, écris le label pour le bouton (ou `skip` pour « Participer »)."
+            f"{interaction.user.mention}, écris le label pour le bouton (ou `skip` pour \"Participer\")."
         )
         prompt = await interaction.original_response()
 
@@ -91,10 +93,15 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
         await prompt.delete()
         await label_msg.delete()
 
+        # Sélecteur de salon
         class ChannelSelectView(ChannelSelect):
             def __init__(self):
-                super().__init__(placeholder="Salon de publication…", custom_id="giveaway_channel",
-                                 channel_types=[discord.ChannelType.text], min_values=1, max_values=1)
+                super().__init__(
+                    placeholder="Salon de publication…",
+                    custom_id="giveaway_channel",
+                    channel_types=[discord.ChannelType.text],
+                    min_values=1, max_values=1
+                )
 
             async def callback(self, select_inter: discord.Interaction):
                 chan = select_inter.guild.get_channel(self.values[0].id)
@@ -116,34 +123,41 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
                 )
                 embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-                # Création de la view et envoi
+                # Création de la view
                 view = GiveawayView(data, end_time)
                 msg = await chan.send(embed=embed, view=view)
                 data["_id"] = msg.id
                 await giveaways_collection.insert_one(data)
                 await select_inter.response.edit_message(content=f"✅ Giveaway créé dans {chan.mention}!", view=None)
 
-                # Planifier la fin automatique
+                # Auto-finish du giveaway
                 async def finish_giveaway():
                     await asyncio.sleep(duration_delta.total_seconds())
-                    # Tirage final
                     parts = data["participants"]
                     if len(parts) < data["winners"]:
                         await chan.send("⚠️ Giveaway terminé, pas assez de participants.")
-                        # Conserver juste reroll
-                        await msg.edit(view=view.make_reroll_only())
+                        try:
+                            await msg.edit(view=view.make_reroll_only())
+                        except discord.NotFound:
+                            pass
                         return
                     winners = random.sample(parts, data["winners"])
                     mentions = " ".join(f"<@{w}>" for w in winners)
                     await chan.send(f"🎊 {mentions}, félicitations !")
-                    # Mise à jour embed
                     embed_fin = msg.embeds[0]
                     embed_fin.add_field(name="🎊 Gagnants", value=mentions, inline=False)
-                    await msg.edit(embed=embed_fin, view=view.make_reroll_only())
-                    await giveaways_collection.update_one({"_id": data["_id"]}, {"$set": {"winners_list": winners}})
+                    try:
+                        await msg.edit(embed=embed_fin, view=view.make_reroll_only())
+                    except discord.NotFound:
+                        pass
+                    await giveaways_collection.update_one(
+                        {"_id": data["_id"]},
+                        {"$set": {"winners_list": winners}}
+                    )
 
                 asyncio.create_task(finish_giveaway())
 
+        # Envoi du select
         select_view = View(timeout=None)
         select_view.add_item(ChannelSelectView())
         await interaction.channel.send(f"{interaction.user.mention}, choisis le salon :", view=select_view)
@@ -154,7 +168,7 @@ class GiveawayView(View):
         super().__init__(timeout=None)
         self.data = data
         self.end_time = end_time
-        # Bouton participer
+        # Bouton Participer
         raw = data.get("button_label", "Participer")
         label, emoji = parse_label_and_emoji(raw)
         part_btn = Button(label=label, emoji=emoji, style=discord.ButtonStyle.primary, custom_id="giveaway_participate")
@@ -197,7 +211,7 @@ class GiveawayView(View):
             parts.append(uid)
             await interaction.response.send_message("✅ Participation ajoutée.", ephemeral=True)
         await giveaways_collection.update_one({"_id": self.data["_id"]}, {"$set": {"participants": parts}})
-        # Maj embed
+        # Mise à jour embed participants
         msg = interaction.message
         ts = int(self.end_time.timestamp())
         embed = msg.embeds[0]
@@ -228,7 +242,6 @@ class GiveawayView(View):
         winners = random.sample(parts, self.data["winners"])
         mentions = " ".join(f"<@{w}>" for w in winners)
         await interaction.channel.send(f"🎊 {mentions}, félicitations !")
-        # Maj embed
         msg = interaction.message
         embed = msg.embeds[0]
         embed.add_field(name="🎊 Gagnants", value=mentions, inline=False)
