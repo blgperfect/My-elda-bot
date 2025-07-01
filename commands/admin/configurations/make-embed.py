@@ -2,17 +2,14 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from config.params import EMBED_COLOR, EMBED_FOOTER_TEXT, EMBED_FOOTER_ICON_URL
-from config.mongo import embed_collection
 
-MAX_SAVED = 5
 VIEW_TIMEOUT = 900  # 15 minutes
 
 class EmbedBuilderView(discord.ui.View):
-    def __init__(self, interaction: discord.Interaction, destination: discord.TextChannel, save_name: str | None = None):
+    def __init__(self, interaction: discord.Interaction, destination: discord.TextChannel):
         super().__init__(timeout=VIEW_TIMEOUT)
         self.interaction = interaction
         self.destination = destination
-        self.save_name = save_name
         self.embed_data = {
             "title": None,
             "description": None,
@@ -55,15 +52,6 @@ class EmbedBuilderView(discord.ui.View):
         await inter.response.defer()
         # Envoi de l'embed
         await self.destination.send(embed=self.build_embed())
-        # Sauvegarde en DB
-        if self.save_name:
-            guild_id = self.interaction.guild_id
-            total = await embed_collection.count_documents({"guild": guild_id})
-            if total >= MAX_SAVED:
-                await inter.followup.send(f"Limite atteinte : {MAX_SAVED} embeds maximum.", ephemeral=True)
-            else:
-                await embed_collection.insert_one({"guild": guild_id, "name": self.save_name, "channel": self.destination.id, "data": self.embed_data})
-                await inter.followup.send(f"Embed sauvegardé sous `{self.save_name}`.", ephemeral=True)
         try:
             await inter.edit_original_response(content="✅ Embed envoyé.", embed=None, view=None)
         except discord.HTTPException:
@@ -95,7 +83,7 @@ class EmbedBuilderView(discord.ui.View):
 
     @discord.ui.button(label="Ajouter champ", style=discord.ButtonStyle.secondary)
     async def edit_field(self, inter: discord.Interaction, button: discord.ui.Button):
-        class FieldModal(discord.ui.Modal, title="Ajouter/Modifier un champ"):
+        class FieldModal(discord.ui.Modal, title="Ajouter un champ"):
             name = discord.ui.TextInput(label="Nom du champ", required=True)
             value = discord.ui.TextInput(label="Valeur du champ", style=discord.TextStyle.paragraph, required=True)
             inline = discord.ui.TextInput(label="Inline (True/False)", required=True)
@@ -156,7 +144,7 @@ class EmbedBuilderView(discord.ui.View):
 
     @discord.ui.button(label="Footer", style=discord.ButtonStyle.secondary)
     async def edit_footer(self, inter: discord.Interaction, button: discord.ui.Button):
-        class FooterModal(discord.ui.Modal, title="Texte du footer"):
+        class FooterModal(discord.ui.Modal, title="Modifier le footer"):
             text_input = discord.ui.TextInput(label="Footer", required=False, max_length=2048)
             def __init__(self, parent: EmbedBuilderView):
                 super().__init__()
@@ -179,79 +167,24 @@ class EmbedBuilderView(discord.ui.View):
         })
         await self.update_message(inter)
 
-class EmbedPaginatorView(discord.ui.View):
-    def __init__(self, docs: list[dict], author: discord.Member):
-        super().__init__(timeout=None)
-        self.docs = docs
-        self.embeds = []
-        for d in docs:
-            data = d.get("data", d.get("embed", {}))
-            e = discord.Embed(color=data.get("color", EMBED_COLOR))
-            if data.get("title"): e.title = data["title"]
-            if data.get("description"): e.description = data["description"]
-            for fn, fv, fi in data.get("fields", []): e.add_field(name=fn, value=fv, inline=fi)
-            if data.get("thumbnail"): e.set_thumbnail(url=data["thumbnail"])
-            if data.get("image"): e.set_image(url=data["image"])
-            e.set_footer(text=f"Nom : {d['name']}")
-            self.embeds.append(e)
-        self.index = 0
-        self.author = author
-        self.prev_button.disabled = True
-        self.next_button.disabled = len(self.embeds) <= 1
-        self.delete_button.disabled = False
-
-    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.secondary)
-    async def prev_button(self, inter: discord.Interaction, button: discord.ui.Button):
-        if inter.user != self.author: return await inter.response.defer()
-        self.index -= 1
-        self.next_button.disabled = False
-        self.prev_button.disabled = self.index == 0
-        await inter.response.edit_message(embed=self.embeds[self.index], view=self)
-
-    @discord.ui.button(label="➡️", style=discord.ButtonStyle.secondary)
-    async def next_button(self, inter: discord.Interaction, button: discord.ui.Button):
-        if inter.user != self.author: return await inter.response.defer()
-        self.index += 1
-        self.prev_button.disabled = False
-        self.next_button.disabled = self.index == len(self.embeds)-1
-        await inter.response.edit_message(embed=self.embeds[self.index], view=self)
-
-    @discord.ui.button(label="🗑️ Supprimer", style=discord.ButtonStyle.danger)
-    async def delete_button(self, inter: discord.Interaction, button: discord.ui.Button):
-        if inter.user != self.author: return await inter.response.defer()
-        # Suppression en DB
-        doc = self.docs[self.index]
-        await embed_collection.delete_one({"guild": inter.guild_id, "name": doc['name']})
-        # Désactiver les boutons
-        for child in self.children:
-            child.disabled = True
-        await inter.response.edit_message(content=f"✅ Embed `{doc['name']}` supprimé.", view=self)
-
 class EmbedCog(commands.Cog):
-    """Cog pour création et gestion rapide des embeds."""
+    """Cog pour création rapide des embeds sans persistance."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="make_embed", description="Créer un embed personnalisé. Optionnellement sauvegarder.")
+    @app_commands.command(name="make_embed", description="Créer un embed personnalisé.")
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
-    async def make_embed(self, interaction: discord.Interaction, channel: discord.TextChannel, name: str | None = None):
-        view = EmbedBuilderView(interaction, channel, save_name=name)
-        await interaction.response.send_message(content="Ce menu expirera dans 15 minutes.", embed=view.build_embed(), view=view)
-
-    @app_commands.command(name="list_embeds", description="Afficher et gérer les embeds sauvegardés.")
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
-    async def list_embeds(self, interaction: discord.Interaction):
-        docs = await embed_collection.find({"guild": interaction.guild_id}).to_list(length=None)
-        if not docs:
-            return await interaction.response.send_message("Aucun embed enregistré.", ephemeral=True)
-        view = EmbedPaginatorView(docs, interaction.user)
-        await interaction.response.send_message(embed=view.embeds[0], view=view)
+    async def make_embed(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        view = EmbedBuilderView(interaction, channel)
+        await interaction.response.send_message(
+            content="Ce menu expirera dans 15 minutes.",
+            embed=view.build_embed(),
+            view=view
+        )
 
     @make_embed.error
-    @list_embeds.error
     async def perm_error(self, interaction: discord.Interaction, error):
         if isinstance(error, app_commands.errors.MissingPermissions):
             await interaction.response.send_message("🔒 Vous devez être administrateur.", ephemeral=True)
