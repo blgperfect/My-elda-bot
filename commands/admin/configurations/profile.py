@@ -75,31 +75,35 @@ class GenderSelectView(discord.ui.View):
         super().__init__(timeout=None)
         self.bot = bot
         self.data = data
-        options = [
+
+    @discord.ui.select(
+        placeholder="Votre genre",
+        custom_id="gender_select",
+        min_values=1,
+        max_values=1,
+        options=[
             discord.SelectOption(label="Femme", value="female"),
             discord.SelectOption(label="Homme", value="male"),
             discord.SelectOption(label="Autre", value="other"),
         ]
-        self.add_item(discord.ui.Select(
-            placeholder="Votre genre",
-            options=options,
-            custom_id="gender_select"
-        ))
-
-    @discord.ui.select(custom_id="gender_select")
+    )
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+        # Enregistrer le genre sélectionné
         self.data["gender"] = select.values[0]
         guild = interaction.guild
         user = interaction.user
 
+        # Vérifier qu'il n'existe pas déjà un profil
         if await profile_collection.find_one({"guild_id": guild.id, "user_id": user.id}):
             return await interaction.response.send_message(
                 "❌ Vous avez déjà un profil.", ephemeral=True
             )
 
+        # Sauvegarder les données
         doc = {**self.data, "guild_id": guild.id, "user_id": user.id}
         await profile_collection.insert_one(doc)
 
+        # Générer et envoyer l'image du profil
         buffer = await render_profile_to_image({"avatar_url": user.display_avatar.url, **self.data})
         cfg = await profile_collection.find_one({"_id": f"config_{guild.id}"})
         channel_id = cfg.get(f"{self.data['gender']}_channel")
@@ -113,10 +117,8 @@ class GenderSelectView(discord.ui.View):
         msg = await channel.send(file=File(buffer, "profile.png"), view=view)
         self.bot.add_view(view, message_id=msg.id)
 
-        await interaction.followup.send(
-            "✅ Votre profil a été créé !", ephemeral=True
-        )
-
+        # Confirmation à l'utilisateur
+        await interaction.response.send_message("✅ Votre profil a été créé !", ephemeral=True)
 
 class ProfileActionsView(discord.ui.View):
     def __init__(self, bot: commands.Bot):
