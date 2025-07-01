@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from discord.ui import View, ChannelSelect, Button, Select
+from discord.ui import View, ChannelSelect, Button, Select, Modal, TextInput
 
 # Import de la collection MongoDB dédiée
 from config.mongo import custom_voc_collection
@@ -40,7 +40,7 @@ class CustomVocView(View):
     async def on_category_selected(self, interaction: discord.Interaction):
         self.category_id = self.category_select.values[0].id
         self.clear_items()
-        # Étape 2: sélection du salon de création (avec recherche)
+        # Étape 2: sélection du salon de création
         self.channel_select = ChannelSelect(
             placeholder="2️⃣ Choisissez le salon vocal pour lancer la création",
             custom_id="customvoc_select_channel",
@@ -50,7 +50,7 @@ class CustomVocView(View):
         )
         self.channel_select.callback = self.on_channel_selected
         self.add_item(self.channel_select)
-        # Ré-ajouter les boutons
+        # Ré-ajouter boutons
         self.btn_create.disabled = self.existing
         self.btn_delete.disabled = not self.existing
         self.add_item(self.btn_create)
@@ -58,8 +58,10 @@ class CustomVocView(View):
 
         embed = discord.Embed(
             title="Configuration Custom Voc",
-            description=(f"**Catégorie choisie :** <#{self.category_id}>\n\n"
-                         "2️⃣ Sélectionnez maintenant le salon vocal pour lancer la création."),
+            description=(
+                f"**Catégorie choisie :** <#{self.category_id}>\n\n"
+                "2️⃣ Sélectionnez maintenant le salon vocal pour lancer la création."
+            ),
             color=EMBED_COLOR
         )
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
@@ -69,9 +71,11 @@ class CustomVocView(View):
         self.channel_id = self.channel_select.values[0].id
         embed = discord.Embed(
             title="Configuration Custom Voc",
-            description=(f"**Catégorie :** <#{self.category_id}>\n"
-                         f"**Salon de création :** <#{self.channel_id}>\n\n"
-                         "Appuyez sur **Créer la config** pour valider ou sur **Supprimer la config** pour réinitialiser."),
+            description=(
+                f"**Catégorie :** <#{self.category_id}>\n"
+                f"**Salon de création :** <#{self.channel_id}>\n\n"
+                "Appuyez sur **Créer la config** pour valider ou sur **Supprimer la config** pour réinitialiser."
+            ),
             color=EMBED_COLOR
         )
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
@@ -80,7 +84,6 @@ class CustomVocView(View):
     async def on_create_clicked(self, interaction: discord.Interaction):
         if not (self.category_id and self.channel_id):
             return await interaction.response.send_message("❌ Sélectionnez d'abord catégorie et salon.", ephemeral=True)
-        # Sauvegarde en base
         await custom_voc_collection.replace_one(
             {"guild_id": self.guild.id},
             {"guild_id": self.guild.id, "category_id": self.category_id, "create_channel_id": self.channel_id},
@@ -88,8 +91,10 @@ class CustomVocView(View):
         )
         embed = discord.Embed(
             title="✅ Configuration enregistrée",
-            description=(f"Les salons vocaux personnalisés seront créés dans <#{self.category_id}> "
-                         f"lorsque des membres rejoindront <#{self.channel_id}>."),
+            description=(
+                f"Les salons vocaux personnalisés seront créés dans <#{self.category_id}> "
+                f"lorsque des membres rejoindront <#{self.channel_id}>."
+            ),
             color=EMBED_COLOR
         )
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
@@ -105,12 +110,25 @@ class CustomVocView(View):
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
         await interaction.response.edit_message(embed=embed, view=None)
 
+class RenameModal(Modal):
+    def __init__(self, channel: discord.VoiceChannel):
+        super().__init__(title="Renommer votre salon")
+        self.channel = channel
+        self.input = TextInput(label="Nouveau nom", custom_id="rename_input", style=discord.TextStyle.short, max_length=100)
+        self.add_item(self.input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        new_name = self.input.value
+        await self.channel.edit(name=new_name)
+        await interaction.response.send_message(f"✏️ Salon renommé en **{new_name}**.", ephemeral=True)
+
 class PersonalConfigView(View):
     """Menu pour configurer un salon personnel"""
-    def __init__(self, channel: discord.VoiceChannel):
+    def __init__(self, channel: discord.VoiceChannel, owner_id: int):
         super().__init__(timeout=None)
         self.channel = channel
-        # Select pour limiter le nombre de membres
+        self.owner_id = owner_id
+        # Limitation
         self.limit_select = Select(
             placeholder="🔢 Limite de membres (0 = illimité)",
             custom_id="personal_limit_select",
@@ -120,42 +138,29 @@ class PersonalConfigView(View):
         )
         self.limit_select.callback = self.on_limit_selected
         self.add_item(self.limit_select)
-        # Boutons renommer et statut
+        # Renommer & statut
         self.rename_button = Button(label="✏️ Renommer", style=discord.ButtonStyle.secondary, custom_id="personal_btn_rename")
         self.status_button = Button(label="ℹ️ Statut", style=discord.ButtonStyle.secondary, custom_id="personal_btn_status")
-        self.add_item(self.rename_button)
-        self.add_item(self.status_button)
         self.rename_button.callback = self.on_rename_clicked
         self.status_button.callback = self.on_status_clicked
+        self.add_item(self.rename_button)
+        self.add_item(self.status_button)
 
-    async def on_limit_selected(self, interaction: discord.Interaction, select: Select):
-        new_limit = int(select.values[0])
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("🚫 Ce n'est pas votre menu.", ephemeral=True)
+            return False
+        return True
+
+    async def on_limit_selected(self, interaction: discord.Interaction):
+        new_limit = int(self.limit_select.values[0])
         await self.channel.edit(user_limit=new_limit)
         await interaction.response.send_message(f"🔢 Nombre max fixé à {new_limit}.", ephemeral=True)
 
-    async def on_rename_clicked(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(
-            discord.ui.Modal(
-                title="Renommer votre salon",
-                components=[
-                    discord.ui.TextInput(
-                        label="Nouveau nom",
-                        custom_id="rename_input",
-                        style=discord.TextStyle.short,
-                        max_length=100
-                    )
-                ],
-                callback=self.handle_rename_modal
-            )
-        )
+    async def on_rename_clicked(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(RenameModal(self.channel))
 
-    async def handle_rename_modal(self, interaction: discord.Interaction):
-        new_name = interaction.data['components'][0]['components'][0]['value']
-        await self.channel.edit(name=new_name)
-        await interaction.response.send_message(f"✏️ Salon renommé en **{new_name}**.", ephemeral=True)
-
-    async def on_status_clicked(self, interaction: discord.Interaction, button: Button):
-        # Exemple de statut simple (tu peux enrichir)
+    async def on_status_clicked(self, interaction: discord.Interaction):
         await interaction.response.send_message(
             f"🔔 Salon actif : {len(self.channel.members)} membre(s) connecté(s)", ephemeral=True
         )
@@ -176,9 +181,11 @@ class CustomVocCog(commands.Cog):
         existing = await custom_voc_collection.find_one({"guild_id": interaction.guild.id}) is not None
         embed = discord.Embed(
             title="Configuration Custom Voc",
-            description=("Bienvenue dans la configuration des salons vocaux personnalisés !\n\n"
-                         "1️⃣ Choisissez la **catégorie** où seront créés les salons.\n"
-                         "2️⃣ Choisissez le **salon** où les membres pourront lancer la création."),
+            description=(
+                "Bienvenue dans la configuration des salons vocaux personnalisés !\n\n"
+                "1️⃣ Choisissez la **catégorie** où seront créés les salons.\n"
+                "2️⃣ Choisissez le **salon** où les membres pourront lancer la création."
+            ),
             color=EMBED_COLOR
         )
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
@@ -200,20 +207,21 @@ class CustomVocCog(commands.Cog):
                 reason="Salon vocal custom"
             )
             await member.move_to(new_channel)
-            # Envoi du menu de config personnel
-            view = PersonalConfigView(new_channel)
-            await new_channel.send(embed=discord.Embed(
-                title="Gestion de votre salon",
-                description=(
-                    "Utilisez ce menu pour configurer votre salon :\n"
-                    "• Choisissez une limite de membres.\n"
-                    "• Renommez votre salon.\n"
-                    "• Affichez le statut actuel."
-                ),
-                color=EMBED_COLOR
-            ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL), view=view)
-
-        # Suppression automatique lorsque vide
+            view = PersonalConfigView(new_channel, owner_id=member.id)
+            await new_channel.send(
+                embed=discord.Embed(
+                    title="Gestion de votre salon",
+                    description=(
+                        "Utilisez ce menu pour configurer votre salon :\n"
+                        "• Choisissez une limite de membres.\n"
+                        "• Renommez votre salon.\n"
+                        "• Affichez le statut actuel."
+                    ),
+                    color=EMBED_COLOR
+                ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL),
+                view=view
+            )
+        # Suppression automatique
         if before.channel and before.channel.category_id == config["category_id"]:
             channel = before.channel
             if isinstance(channel, discord.VoiceChannel) and len(channel.members) == 0 and channel.id != config.get("create_channel_id"):
