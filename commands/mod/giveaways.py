@@ -19,9 +19,6 @@ from config.mongo import giveaways_collection
 _EMOJI_RE = re.compile(r'<(a?):(\w+):(\d+)>')
 
 def parse_label_and_emoji(raw: str):
-    """
-    Comme dans confess.py : retourne (label, PartialEmoji|None) depuis raw.
-    """
     m = _EMOJI_RE.search(raw)
     if not m:
         return raw, None
@@ -51,7 +48,6 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
     duree   = TextInput(label="Durée (m,h,d,w)", required=True, placeholder="ex: 10m")
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Validation des entrées
         try:
             winners_count = int(self.winners.value)
             if winners_count < 1:
@@ -76,7 +72,6 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
             "participants": []
         }
 
-        # Récupérer le label de bouton
         await interaction.response.send_message(
             f"{interaction.user.mention}, écris le label pour le bouton (ou `skip` pour « Participer »)."
         )
@@ -96,17 +91,14 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
         await prompt.delete()
         await label_msg.delete()
 
-        # Sélecteur de salon
         class ChannelSelectView(ChannelSelect):
             def __init__(self):
-                super().__init__(placeholder="Salon de publication…", custom_id="giveaway_channel",
-                                 channel_types=[discord.ChannelType.text], min_values=1, max_values=1)
+                super().__init__(placeholder="Salon de publication…", custom_id="giveaway_channel", channel_types=[discord.ChannelType.text], min_values=1, max_values=1)
 
             async def callback(self, select_inter: discord.Interaction):
                 chan = select_inter.guild.get_channel(self.values[0].id)
                 data["channel_id"] = chan.id
 
-                # Construire l'embed du giveaway
                 end = data["created_at"] + duration_delta
                 ts = int(end.timestamp())
                 embed = discord.Embed(
@@ -114,6 +106,7 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
                     description=(
                         f"Récompense : **{data['reward']}**\n"
                         f"Gagnants : **{data['winners']}**\n"
+                        f"Participants : **0**\n"
                         f"Fin dans : <t:{ts}:R>"
                     ),
                     color=EMBED_COLOR,
@@ -121,7 +114,6 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
                 )
                 embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-                # Envoyer avec la view finale
                 view = GiveawayView(data)
                 msg = await chan.send(embed=embed, view=view)
                 data["_id"] = msg.id
@@ -138,15 +130,12 @@ class GiveawayView(View):
         super().__init__(timeout=None)
         self.data = data
 
-        # Bouton Participer
         raw = data.get("button_label", "Participer")
         label, emoji = parse_label_and_emoji(raw)
-        btn_part = Button(label=label, emoji=emoji, style=discord.ButtonStyle.primary,
-                          custom_id="giveaway_participate")
+        btn_part = Button(label=label, emoji=emoji, style=discord.ButtonStyle.primary, custom_id="giveaway_participate")
         btn_part.callback = self.participate
         self.add_item(btn_part)
 
-        # Boutons modération
         btn_cancel = Button(label="Annuler", style=discord.ButtonStyle.danger, custom_id="giveaway_cancel")
         btn_cancel.callback = self.cancel
         self.add_item(btn_cancel)
@@ -174,7 +163,22 @@ class GiveawayView(View):
         else:
             parts.append(uid)
             await interaction.response.send_message("✅ Vous participez !", ephemeral=True)
+        # Mettre à jour la DB
         await giveaways_collection.update_one({"_id": self.data["_id"]}, {"$set": {"participants": parts}})
+        # Mettre à jour l'embed avec le nombre actuel de participants
+        msg = interaction.message
+        embed = msg.embeds[0]
+        # Reconstruire la description
+        end_ts = embed.timestamp
+        ts = int(end_ts.timestamp())
+        new_desc = (
+            f"Récompense : **{self.data['reward']}**\n"
+            f"Gagnants : **{self.data['winners']}**\n"
+            f"Participants : **{len(parts)}**\n"
+            f"Fin dans : <t:{ts}:R>"
+        )
+        embed.description = new_desc
+        await msg.edit(embed=embed)
 
     async def cancel(self, interaction: discord.Interaction):
         await interaction.message.delete()
@@ -182,12 +186,14 @@ class GiveawayView(View):
         await interaction.response.send_message("🚫 Giveaway annulé.", ephemeral=True)
 
     async def reroll(self, interaction: discord.Interaction):
+        # Permet de choisir un nouveau gagnant après fin du giveaway
         doc = await giveaways_collection.find_one({"_id": self.data["_id"]})
         parts = doc.get("participants", [])
         if not parts:
             return await interaction.response.send_message("⚠️ Pas de participants.", ephemeral=True)
         winner = random.choice(parts)
-        await interaction.response.send_message(f"🎉 Nouveau gagnant : <@{winner}>", ephemeral=False)
+        # Mentionner directement
+        await interaction.response.send_message(f"🎉 <@{winner}>, tu as gagné !", ephemeral=False)
 
     async def draw_now(self, interaction: discord.Interaction):
         doc = await giveaways_collection.find_one({"_id": self.data["_id"]})
@@ -195,8 +201,12 @@ class GiveawayView(View):
         if len(parts) < self.data["winners"]:
             return await interaction.response.send_message("⚠️ Pas assez de participants.", ephemeral=True)
         winners = random.sample(parts, self.data["winners"])
+        # Mentionner chaque gagnant hors embed
+        mentions = " ".join(f"<@{w}>" for w in winners)
+        await interaction.channel.send(f"🎊 {mentions}, félicitations !")
+        # Mettre à jour l'embed avec les gagnants
         embed = interaction.message.embeds[0]
-        embed.add_field(name="🎊 Gagnants", value=", ".join(f"<@{w}>" for w in winners), inline=False)
+        embed.add_field(name="🎊 Gagnants", value=mentions, inline=False)
         await interaction.message.edit(embed=embed, view=None)
         await giveaways_collection.update_one({"_id": self.data["_id"]}, {"$set": {"winners_list": winners}})
         await interaction.response.send_message("✅ Tirage effectué !", ephemeral=True)
