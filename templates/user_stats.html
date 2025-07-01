@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {
       --bg-page: #f0f2f5;
@@ -17,9 +17,7 @@
     body {
       background: var(--bg-page);
       font-family: "Segoe UI", sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      display: flex; justify-content: center; align-items: center;
       height: 100vh;
     }
     .card {
@@ -29,44 +27,28 @@
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.05);
       overflow: hidden;
-      display: grid;
-      grid-template-columns: 180px 1fr;
+      display: grid; grid-template-columns: 180px 1fr;
     }
-    /* Colonne avatar */
-    .card .avatar-col {
-      background: var(--secondary);
-      display: flex;
-      justify-content: center;
-      align-items: center;
+    /* Colonne avatar avec gradient doux */
+    .avatar-col {
+      background: linear-gradient(135deg, #2C3E50, #4CA1AF);
+      display: flex; justify-content: center; align-items: center;
       padding: 20px;
     }
     .avatar-col img {
-      width: 140px;
-      height: 140px;
-      border-radius: 50%;
-      border: 4px solid #fff;
+      width: 140px; height: 140px;
+      border-radius: 50%; border: 4px solid #fff;
       object-fit: cover;
     }
-    /* Colonne contenu */
-    .card .content-col {
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
+    .content-col {
+      padding: 24px; display: flex; flex-direction: column; gap: 16px;
     }
-    .content-col h1 {
-      font-size: 24px;
-      color: var(--text-main);
-    }
-    .content-col .subtitle {
-      font-size: 16px;
-      color: var(--text-muted);
-    }
+    .content-col h1 { font-size: 24px; color: var(--text-main); }
+    .content-col .subtitle { font-size: 16px; color: var(--text-muted); }
+
     .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-      margin-top: 8px;
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 12px; margin-top: 8px;
     }
     .stat-box {
       background: var(--bg-page);
@@ -76,26 +58,19 @@
       text-align: center;
     }
     .stat-box .label {
-      font-size: 14px;
-      color: var(--text-muted);
-      margin-bottom: 4px;
+      font-size: 14px; color: var(--text-muted); margin-bottom: 4px;
     }
     .stat-box .value {
-      font-size: 20px;
-      font-weight: bold;
-      color: var(--primary);
+      font-size: 20px; font-weight: bold; color: var(--primary);
     }
     .footer {
-      margin-top: auto;
-      font-size: 12px;
-      color: var(--text-muted);
-      text-align: right;
+      margin-top: auto; font-size: 12px;
+      color: var(--text-muted); text-align: right;
     }
   </style>
 </head>
 <body>
   <div class="card">
-    <!-- Avatar + nom -->
     <div class="avatar-col">
       <img src="{{ avatar_url }}" alt="Avatar de {{ username }}">
     </div>
@@ -103,7 +78,6 @@
       <h1>{{ username }}</h1>
       <div class="subtitle">{{ server_name }}</div>
 
-      <!-- Stats globales -->
       <div class="stats-grid">
         <div class="stat-box">
           <div class="label">🗨️ Total Messages</div>
@@ -119,8 +93,7 @@
         </div>
       </div>
 
-      <!-- Evolution 1j / 7j / 14j -->
-      <h2 style="margin-top:16px; font-size:18px; color:var(--text-main)">Activité récente</h2>
+      <h2 style="font-size:18px; color:var(--text-main); margin-top:16px;">Activité récente</h2>
       <div class="stats-grid">
         <div class="stat-box">
           <div class="label">⏱️ Messages (24h)</div>
@@ -135,8 +108,7 @@
           <div class="value">{{ m14 }}</div>
         </div>
       </div>
-
-      <div class="stats-grid" style="margin-top:8px">
+      <div class="stats-grid" style="margin-top:8px;">
         <div class="stat-box">
           <div class="label">⏱️ Voix (24h)</div>
           <div class="value">{{ v0 }}</div>
@@ -151,9 +123,7 @@
         </div>
       </div>
 
-      <div class="footer">
-        Généré le {{ generated_on }}
-      </div>
+      <div class="footer">Généré le {{ generated_on }}</div>
     </div>
   </div>
 </body>

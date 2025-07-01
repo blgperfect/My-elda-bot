@@ -92,23 +92,19 @@ class MemberStats(commands.Cog):
         total_msgs = sum(msg_counts)
         total_voice = sum(voice_mins)
 
-        # 3️⃣ Top canaux
-        chan_docs = [d for d in docs if d.get("type") == "channel"]
-        # Pas utilisés dans cette carte, mais on garde la logique si besoin
-
-        # 4️⃣ Activité récente
+        # 3️⃣ Activité récente
         def sum_last(n, data_map):
             return sum(data_map.get((today - datetime.timedelta(days=i)).isoformat(), 0) for i in range(n+1))
 
-        m0 = msg_map.get(today.isoformat(), 0)           # dernières 24h
-        m7 = sum_last(7, msg_map)                        # 7 jours
-        m14 = sum_last(14, msg_map)                      # 14 jours
+        m0 = msg_map.get(today.isoformat(), 0)           # messages 24h
+        m7 = sum_last(7, msg_map)                        # messages 7j
+        m14 = sum_last(14, msg_map)                      # messages 14j
 
-        v0 = voice_map.get(today.isoformat(), 0)
-        v7 = sum_last(7, voice_map)
-        v14 = sum_last(14, voice_map)
+        v0 = voice_map.get(today.isoformat(), 0)         # voix 24h
+        v7 = sum_last(7, voice_map)                      # voix 7j
+        v14 = sum_last(14, voice_map)                    # voix 14j
 
-        # 5️⃣ Rend le HTML
+        # 4️⃣ Render le HTML
         html = template.render(
             avatar_url     = member.display_avatar.url,
             username       = member.display_name,
@@ -121,16 +117,17 @@ class MemberStats(commands.Cog):
             generated_on   = datetime.datetime.utcnow().strftime("%d %B %Y à %H:%M")
         )
 
-        # 6️⃣ Capture headless Chrome avec Playwright
+        # 5️⃣ Capture headless Chrome avec Playwright
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(args=["--no-sandbox"])
-            page = await browser.new_page(viewport={"width": 700, "height": 400})
+            # viewport ajusté en hauteur pour ne rien couper
+            page = await browser.new_page(viewport={"width": 700, "height": 600})
             await page.set_content(html, wait_until="networkidle")
             card = await page.query_selector(".card")
             png = await card.screenshot(omit_background=True)
             await browser.close()
 
-        # 7️⃣ Envoi du PNG
+        # 6️⃣ Envoi du PNG
         await interaction.followup.send(file=File(BytesIO(png), "profile_stats.png"))
 
 
