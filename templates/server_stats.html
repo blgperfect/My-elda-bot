@@ -3,240 +3,213 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap"
+    rel="stylesheet"
+  />
   <style>
-    /*— Variables de couleurs —*/
     :root {
-      --bg-page: #2c2f33;
-      --bg-header-start: #3f3cbb;
-      --bg-header-end: #6b466e;
-      --bg-card: #202225;
-      --text-main: #ffffff;
-      --text-muted: #b9bbbe;
-      --stat-bg: #2f3136;
-      --accent: #7289da;
+      --bg: #1a1b1e;
+      --card: #27292d;
+      --text: #e1e1e1;
+      --text-muted: #8a8c90;
+      --accent: #0099ff;
+      --shadow: rgba(0, 0, 0, 0.5);
     }
-
-    /*— Reset de base —*/
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * { margin:0; padding:0; box-sizing:border-box; }
     body {
-      font-family: "Segoe UI", sans-serif;
-      background: var(--bg-page);
-      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 30px;
     }
-
-    /*— Conteneur global ciblé par Playwright —*/
-    .container {
-      width: 1902px;
-      /* Hauteur auto pour coller au contenu, plus de vide en bas */
-      height: auto;
-      /* Padding réduit en bas pour limiter l’espace vide */
-      padding: 0;
-      background: transparent;
+    .stats-container {
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+      max-width: 1600px;
+      margin: auto;
     }
-
-    /*— En-tête —*/
     header {
+      background: linear-gradient(135deg, #005f99, #007acc);
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px var(--shadow);
       display: flex;
       align-items: center;
-      gap: 20px;
-      padding: 40px;
-      background: linear-gradient(135deg, var(--bg-header-start), var(--bg-header-end));
-      border-bottom-left-radius: 12px;
-      border-bottom-right-radius: 12px;
+      gap: 30px;
     }
     header img {
-      width: 80px;
-      height: 80px;
+      width: 120px;
+      height: 120px;
       border-radius: 50%;
-      background: var(--stat-bg);
+      background: var(--card);
     }
     header .titles {
       flex: 1;
     }
-    header .titles h1 {
-      font-size: 48px;
+    header h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      line-height: 1.1;
     }
-    header .titles .sub {
-      margin-top: 4px;
-      font-size: 18px;
-      color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    header .titles .sub span.icon { font-size: 20px; }
-    header .generated {
-      font-size: 14px;
+    header .meta {
+      margin-top: 10px;
+      font-size: 1.1rem;
       color: var(--text-muted);
     }
 
-    /*— Grille des cartes —*/
     .cards {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 24px;
-      padding: 40px;
-      padding-bottom: 20px; /* moins de padding bas */
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 30px;
     }
-
-    /*— Style d’une carte —*/
     .card {
-      background: var(--bg-card);
-      border-radius: 12px;
-      padding: 24px;
-      /* Hauteur minimale pour “remplir” un peu plus le bloc */
-      min-height: 360px;
+      background: var(--card);
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 6px 18px var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
     }
     .card h2 {
+      font-size: 1.75rem;
+      font-weight: 600;
       display: flex;
       align-items: center;
-      gap: 12px;
-      font-size: 22px;
-      margin-bottom: 16px;
+      gap: 15px;
     }
-    .card h2 .icon { font-size: 24px; }
-    .card .list-item {
+    .item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: var(--stat-bg);
-      border-radius: 8px;
-      padding: 12px 16px;
-      margin-bottom: 12px;
+      background: #1f2023;
+      padding: 16px 20px;
+      border-radius: 12px;
     }
-
-    /*— Rang —*/
-    .list-item .rank {
-      width: 28px;
-      text-align: center;
-      font-weight: bold;
-      font-size: 18px;
+    .left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
-    .rank-1 { color: #f1c40f; }
-    .rank-2 { color: #bdc3c7; }
-    .rank-3 { color: #cd7f32; }
-
-    /*— Avatar ou icône de salon —*/
-    .avatar, .channel-icon {
+    .icon, .avatar {
+      width: 60px;
+      height: 60px;
       flex-shrink: 0;
-      width: 40px;
-      height: 40px;
       border-radius: 50%;
-      background: var(--stat-bg);
+      background: var(--card);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
+      font-size: 1.5rem;
     }
-    .avatar img { width: 100%; height: 100%; border-radius: 50%; }
-
-    /*— Info et détail —*/
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+    }
     .info {
-      flex: 1;
-      margin: 0 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
     .info .name {
-      font-size: 18px;
+      font-size: 1.25rem;
+      font-weight: 600;
     }
     .info .detail {
-      margin-top: 4px;
-      font-size: 14px;
+      font-size: 1rem;
       color: var(--text-muted);
     }
-
-    /*— Bouton stat —*/
-    .stat-button {
+    .btn-stat {
       background: var(--accent);
       color: #fff;
-      border-radius: 6px;
-      padding: 6px 12px;
-      font-size: 14px;
-      font-weight: bold;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
       white-space: nowrap;
     }
-
-    /*— Pied de page —*/
     footer {
       text-align: center;
-      padding: 16px;
-      font-size: 14px;
+      margin-top: 20px;
+      font-size: 0.9rem;
       color: var(--text-muted);
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <!-- En-tête -->
+  <div class="stats-container">
     <header>
-      <img src="{{ guild_pfp }}" alt="Logo du serveur">
+      <img src="{{ guild_pfp }}" alt="Icone du serveur">
       <div class="titles">
-        <h1>Statistiques de messages de {{ guild_name }}</h1>
-        <div class="sub">
-          <span class="icon">👥</span><span>{{ member_count }} members</span>
-          <span class="icon">📊</span><span>Activity Leaderboard</span>
+        <h1>Statistiques avancées – {{ guild_name }}</h1>
+        <div class="meta">
+          {{ member_count }} membres • Généré le {{ generated_on }}
         </div>
       </div>
-      <div class="generated">Généré le {{ generated_on }}</div>
     </header>
 
-    <!-- Trois cartes -->
     <div class="cards">
-      <!-- Top Active Users -->
+      <!-- Top Users -->
       <div class="card">
-        <h2><span class="icon">👑</span>Top Active Users</h2>
+        <h2>👑 Top Utilisateurs</h2>
         {% for u in users %}
-        <div class="list-item">
-          <div class="rank rank-{{ u.rank }}">{{ u.rank }}</div>
-          <div class="avatar">
-            <img src="{{ u.avatar_url }}" alt="Avatar">
-          </div>
-          <div class="info">
-            <div class="name">@{{ u.username }}</div>
-            <div class="detail">
-              Total: {{ u.total_msgs }} Messages, {{ u.total_voice_min }} Minutes
+        <div class="item">
+          <div class="left">
+            <div class="icon">{{ u.rank }}</div>
+            <div class="avatar">
+              <img src="{{ u.avatar_url }}" alt="Avatar">
+            </div>
+            <div class="info">
+              <div class="name">{{ u.username }}</div>
+              <div class="detail">
+                Total : {{ u.total_msgs }} Msgs • {{ u.total_voice_min }} min
+              </div>
             </div>
           </div>
-          <div class="stat-button">{{ u.daily_msgs }} Messages</div>
+          <div class="btn-stat">{{ u.daily_msgs }} msgs/j</div>
         </div>
         {% endfor %}
       </div>
 
-      <!-- Top Active Text Channels -->
+      <!-- Top Text Channels -->
       <div class="card">
-        <h2><span class="icon">💬</span>Top Active Text Channels</h2>
+        <h2>💬 Top Salons Textuels</h2>
         {% for c in text_channels %}
-        <div class="list-item">
-          <div class="rank rank-{{ c.rank }}">{{ c.rank }}</div>
-          <div class="channel-icon">#</div>
-          <div class="info">
-            <div class="name">{{ c.name }}</div>
-            <div class="detail">Catégorie: {{ c.category }}</div>
+        <div class="item">
+          <div class="left">
+            <div class="icon">#</div>
+            <div class="info">
+              <div class="name">{{ c.name }}</div>
+              <div class="detail">Catégorie : {{ c.category }}</div>
+            </div>
           </div>
-          <div class="stat-button">{{ c.msg_count }} Messages</div>
+          <div class="btn-stat">{{ c.count }} msgs</div>
         </div>
         {% endfor %}
       </div>
 
-      <!-- Top Active Voice Channels -->
+      <!-- Top Voice Channels -->
       <div class="card">
-        <h2><span class="icon">🎤</span>Top Active Voice Channels</h2>
+        <h2>🎤 Top Salons Vocaux</h2>
         {% for c in voice_channels %}
-        <div class="list-item">
-          <div class="rank rank-{{ c.rank }}">{{ c.rank }}</div>
-          <div class="channel-icon">🎙️</div>
-          <div class="info">
-            <div class="name">{{ c.name }}</div>
-            <div class="detail">Catégorie: {{ c.category }}</div>
+        <div class="item">
+          <div class="left">
+            <div class="icon">🎙️</div>
+            <div class="info">
+              <div class="name">{{ c.name }}</div>
+              <div class="detail">Catégorie : {{ c.category }}</div>
+            </div>
           </div>
-          <div class="stat-button">{{ c.voice_min }} Minutes</div>
+          <div class="btn-stat">{{ c.count }} min</div>
         </div>
         {% endfor %}
       </div>
     </div>
 
-    <footer>
-      Construit par Elda • {{ footer_text }}
-    </footer>
+    <footer>Construit par Elda • {{ generated_on }}</footer>
   </div>
 </body>
 </html>
