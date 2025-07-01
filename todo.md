@@ -1,44 +1,28 @@
-Salut à tous ! 🎉
-Merci de m’avoir accueillie sur votre serveur **\[Nom du serveur]** !
+Bon donc J'aimerais une commande qui sappelle : /custom-voc
+permisson : administrateur /caché la commande a ceux qui non pas cette permission
+menu embed [regarder params pour les infos a prendre : on utulise exemple : from config.params import (
+    EMBED_COLOR,
+    EMBED_FOOTER_TEXT,
+    EMBED_FOOTER_ICON_URL,
+    MESSAGES,
+)]
 
-👋 **Je m’appelle Elda** (en clin d’œil à Elda Moonwraith 🌙✨), un petit nom tout doux pour une expérience toute mignonne.
-
-──────────────
-📚 **Présentation**
-• Conçue par **xxmissr**, ma mission est d’apporter une touche kawaii à votre serveur grâce à une interface unique.
-• Je ne suis pas (encore) un bot de modération complète : je ne peux pas assurer la protection totale de votre serveur, mais j’apprends vite !
-
-──────────────
-🤖 **À quoi je sers ?**
-• **Modération légère** : quelques outils pratiques pour garder votre serveur sympa.
-• **Profils & stats** : crée ton profil, consulte tes statistiques, et bien plus encore !
-• **Confessions secrètes** : partage tes pensées en toute discrétion.
-
-──────────────
-💡 **Pour commencer**
-• Tape `/help` pour découvrir toutes mes commandes.
-• Clique sur 📺 **Tuto** pour accéder à ma chaîne YouTube.
-• Un souci ? Cliquez sur 🎫 **Support** et je vous aiderai.
-• Envie de me soutenir ? Cliquez sur 🗳️ **Vote** !
-
-Merci et amusez-vous bien ! 🌟
+limitation du code : une seule configuration possible , si le membre fait /custom-voc et qu'il a deja une config on desactive le bouton creer on lui laisse seulement supprimé
+et on ne peux pas supprimé ce qui nexiste pas encore !
+L'embed aurais un menu de selection rattacher a lui pour configurer (faut allez en ordre) : 1. La catégorie pour le salon vocale. 2. Le salon vocale pour créer les salon vocaux custom.(avec explications pour clareté) embed qui se change dynamiquement selon les choix. 
++ 2 bouton , terminé = confirmé les choix + enregistrer dans la db (on enregistre la categorie id et salon id (si jamais il decide de changer les noms) la categorie est l'endroit ou seront créer les futur salon vocaux custom et le salon ou les membre doivent rejoindre pour créer le leurs.)
+bouton suppression = supprimer les configs , ON NE SUPPRIME PAS LES SALON. on supprime uniquement la db donc plus rien se passe si quelqu'un rejoint un salon qui avais ete configurer
 
 
-parfait maintenant change mon code pour rajouté ce text ainsi que les bouton  📺 **Tuto**,  🎫 **Support** ET  🗳️ **Vote**  
-VA CHERCHER DANS PARAMS COMME TU FAIT POUR LEMBED ET TOUT SES INFO LA #complété
+que ce paase t-il ensuite ? 
+eh bien quand un membre rejoint le salon vocale definit on créer un nouveau salon et on le renomme : salon de [nom du membre]
+on envoie un menu avec choix (bouton ou selection non expirable) pour configuré sont salon (ce menu est strictement et uniquement pour lapersonne a qui appartien ce salon)
+choix du menu : changer la limitation (nb d emembre dans le salon voc) renommer le salon , mettre un status au salon vocaux, 
+si la personne quitte le salon , on ne supprime pas sont salon personnelle si il y a encore des gens
+on supprime uniquement le salon quand la derniere personne a y etre quitte
 
-#complété
+le membre ne peux pas gerer les changement (limitation membre et le reste autrement que par le bot et son menu. Nous utulisons automatiquement les permissions & role configurer de la categorie parents)
+c'est clair ? 
 
-# === Lien top.gg
-TOPGG = "https://top.gg/bot/1351415146639134832?s=08ff278d98260"
-SUPPORT_INVITE = "https://discord.gg/b6PbxtUWNk"
-TUTO_YTB = "https://youtube.com/@eldabot?si=3qciRBpP9A5Wx-6E"
-BOT_INVITE = ""
-
-# === Apparence des embeds ===
-EMBED_COLOR = 0xE3BAE8
-EMBED_FOOTER_TEXT = "©𝐸𝓁𝒹𝒶 𝐵𝑜𝓉"
-EMBED_FOOTER_ICON_URL = "https://cdn.discordapp.com/attachments/1102406059722801184/1387882570263433236/IMG_8167.png"
-EMBED_IMAGE_URL = "https://cdn.discordapp.com/attachments/1102406059722801184/1387886546300043264/0C5431CA-4920-413C-BBC7-0F18DA8C3D15.png"
-
+je veux un menu sophistiquer claire et beau!
 
