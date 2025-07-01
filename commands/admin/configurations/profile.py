@@ -21,7 +21,7 @@ template = template_env.get_template("profile_template.html")
 
 
 async def render_profile_to_image(data: dict) -> BytesIO:
-    """Render the HTML profile card to a PNG and return a BytesIO buffer."""
+    """Rendu du template HTML en PNG, avec le background visible."""
     html = template.render(
         avatar_url=data.get("avatar_url", ""),
         nickname=data.get("nickname") or "inconnu",
@@ -31,16 +31,24 @@ async def render_profile_to_image(data: dict) -> BytesIO:
         birthday=data.get("birthday") or "inconnu",
         description=data.get("description") or "aucune"
     )
+
     async with async_playwright() as pw:
         browser = await pw.chromium.launch()
         page = await browser.new_page(viewport={"width": 600, "height": 350})
         await page.set_content(html, wait_until="networkidle")
-        card = await page.query_selector(".card")
-        png = await (card.screenshot(omit_background=True) if card else page.screenshot(omit_background=True))
+
+        # On capture la page entière (la zone 600×350) y compris le background CSS
+        png = await page.screenshot(
+            omit_background=False,
+            clip={"x": 0, "y": 0, "width": 600, "height": 350}
+        )
+
         await browser.close()
+
     buf = BytesIO(png)
     buf.seek(0)
     return buf
+
 
 
 class CreateProfileModal(discord.ui.Modal, title="Créer votre profil"):

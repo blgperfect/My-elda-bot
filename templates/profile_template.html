@@ -4,12 +4,18 @@
   <meta charset="UTF-8" />
   <title>Profil Meet & Friendly</title>
   <style>
-    body {
+    /* Reset basique et police */
+    * {
       margin: 0;
       padding: 0;
-      font-family: "Segoe UI", sans-serif;
-      /* Fond dégradé automne */
-      background: linear-gradient(135deg, #FFBD66, #FF686B);
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      /* Votre image Discord en fond */
+      background: url('https://cdn.discordapp.com/attachments/1102406059722801184/1389582135454597160/DALLE_2025-07-01_08.22.45_-_A_soft_pastel_background_in_pink_lavender_and_light_blue_gradient_tones_with_a_smooth_and_dreamy_appearance._No_text_or_objects_just_a_clean_eleg.webp?ex=686524b6&is=6863d336&hm=74c02d13ca46d9515ab35d8894ca425a233ae2f6cc8468133fe4e8befd94b0db&')
+        no-repeat center center fixed;
+      background-size: cover;
       width: 600px;
       height: 350px;
       display: flex;
@@ -20,65 +26,96 @@
       position: relative;
       width: 550px;
       height: 300px;
-      /* Arrière-plan semi-transparent + texture légère */
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 16px;
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-      padding: 20px;
-      box-sizing: border-box;
-      backdrop-filter: blur(4px);
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 20px;
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 1fr 150px;
+      grid-template-rows: auto 1fr;
+      grid-template-areas:
+        "header avatar"
+        "fields avatar";
+    }
+    .header {
+      grid-area: header;
+      background: linear-gradient(90deg, #FF9A76, #FFD56B);
+      padding: 10px 20px;
+    }
+    .header .title {
+      font-size: 1.4rem;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 1px;
     }
     .avatar {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      width: 100px;
-      height: 100px;
+      grid-area: avatar;
+      align-self: center;
+      justify-self: center;
+      width: 120px;
+      height: 120px;
       border-radius: 50%;
+      border: 4px solid #fff;
       object-fit: cover;
-      border: 3px solid #fff;
-      background-color: #e0e0e0;
+      background-color: #eee;
+      margin: 10px;
     }
     .fields {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      grid-row-gap: 12px;
-      grid-column-gap: 20px;
-      margin-top: 10px;
+      grid-area: fields;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 20px;
     }
     .field {
       display: flex;
-      flex-direction: column;
+      justify-content: space-between;
+      margin-bottom: 12px;
     }
-    .label {
-      font-size: 0.85rem;
+    .field .label {
+      font-size: 0.9rem;
       color: #555;
-      margin-bottom: 4px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-    .value {
-      font-size: 1.1rem;
+    .field .value {
+      font-size: 1rem;
       font-weight: 600;
       color: #333;
+      text-align: right;
     }
     .description {
-      grid-column: span 2;
       margin-top: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.7);
+      border-radius: 8px;
     }
     .description .label {
+      font-size: 0.85rem;
+      color: #555;
       margin-bottom: 6px;
+    }
+    .description .value {
+      font-size: 0.95rem;
+      color: #333;
+      line-height: 1.3;
     }
   </style>
 </head>
 <body>
   <div class="card">
+    <!-- En-tête -->
+    <div class="header">
+      <div class="title">Profil</div>
+    </div>
+    <!-- Avatar de l’utilisateur -->
     <img
       class="avatar"
       src="{{ avatar_url }}"
       alt="Avatar"
-      onerror="this.src='https://via.placeholder.com/100';"
+      onerror="this.src='https://via.placeholder.com/120?text=?';"
     />
+    <!-- Champs de profil -->
     <div class="fields">
       <div class="field">
         <span class="label">Surnom</span>
@@ -100,9 +137,9 @@
         <span class="label">Anniversaire</span>
         <span class="value">{{ birthday or 'inconnu' }}</span>
       </div>
-      <div class="field description">
+      <div class="description">
         <span class="label">Description</span>
-        <span class="value">{{ description or 'aucune' }}</span>
+        <div class="value">{{ description or 'aucune' }}</div>
       </div>
     </div>
   </div>
