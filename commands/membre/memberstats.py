@@ -174,25 +174,30 @@ class MemberStats(commands.Cog):
                 draw.text((x+10, y0+40+j*30), f"{j+1}. {name}", font=small_f, fill=TEXT_COLOR)
                 draw.text((x+w-120, y0+40+j*30), fmt(doc), font=small_f, fill=SUBTEXT_COLOR)
 
-        # Panels du bas
+                # Panels du bas
         def sp(m, n): return sum(m.get((today-datetime.timedelta(days=i)).isoformat(),0) for i in range(n))
-        m1,m7,m14 = sp(msg_map,1), sp(msg_map,7), sp(msg_map,14)
-        v1,v7,v14 = sp(voice_map,1), sp(voice_map,7), sp(voice_map,14)
+        m1,m7,m14       = sp(msg_map,1), sp(msg_map,7), sp(msg_map,14)
+        v1,v7,v14       = sp(voice_map,1), sp(voice_map,7), sp(voice_map,14)
         bottom = [
-            ("🔊 Vocale", [("1j", v1, "min"),("7j", v7, "min"),("14j", v14, "min")]),
-            ("✉️ Messages", [("1j", m1, "Messages"),("7j", m7, "Messages"),("14j", m14, "Messages")])
+            ("🔊 Vocale",    [("1j", v1,   "min"),    ("7j", v7,   "min"),    ("14j", v14,  "min")]),
+            ("✉️ Messages", [("1j", m1,  "Messages"),("7j", m7,  "Messages"),("14j", m14,  "Messages")])
         ]
-        y1 = y0 + h + 20
+        # Position verticale ajustée pour ne pas dépasser le canvas
+        y1 = y0 + h - 10
         for i,(title, rows) in enumerate(bottom):
             x = x0 + i*(w+20)
-            draw.rectangle((x,y1,x+w,y1+h), fill=PANEL_BG)
-            draw.rectangle((x,y1,x+4,y1+h), fill=PINK)
-            draw.text((x+10,y1+10), title, font=txt_f, fill=TEXT_COLOR)
-            for j,(lbl,val,unit) in enumerate(rows):
-                draw.text((x+10,y1+40+j*30), lbl, font=small_f, fill=TEXT_COLOR)
-                draw.text((x+w-120,y1+40+j*30), f"{val} {unit}", font=small_f, fill=SUBTEXT_COLOR)
+            draw.rectangle((x, y1, x+w, y1+h), fill=PANEL_BG)
+            draw.rectangle((x, y1, x+4, y1+h), fill=PINK)
+            draw.text((x+10, y1+10), title, font=txt_f, fill=TEXT_COLOR)
+            for j,(lbl, val, unit) in enumerate(rows):
+                draw.text((x+10, y1+40+j*30), lbl, font=small_f, fill=TEXT_COLOR)
+                draw.text((x+w-120, y1+40+j*30), f"{val} {unit}", font=small_f, fill=SUBTEXT_COLOR)
 
         # Envoi
+        out = io.BytesIO()
+        canvas.save(out, 'PNG')
+        out.seek(0)
+        await interaction.followup.send(file=discord.File(out, 'stats.png'))
         out = io.BytesIO()
         canvas.save(out, 'PNG')
         out.seek(0)
