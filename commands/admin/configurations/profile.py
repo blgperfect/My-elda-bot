@@ -56,7 +56,7 @@ class CreateProfileModal(discord.ui.Modal, title="Créer / Modifier votre profil
     age = discord.ui.TextInput(label="Âge", max_length=3, required=False)
     pronoun = discord.ui.TextInput(label="Pronom", max_length=20, required=False)
     birthday = discord.ui.TextInput(label="Anniversaire (JJ/MM/AAAA)", max_length=10, required=False)
-    description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph, max_length=300, required=False)
+    description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph, max_length=100, required=False)
 
     def __init__(self, bot: commands.Bot, is_modify: bool = False, existing_doc: dict = None):
         super().__init__()
