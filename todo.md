@@ -1,24 +1,17 @@
-***Giveaways***
-> /giveaways > embed (params pour embed) [bouton] > Créer
-Créer action > ouverture d'un modale.
-question 1. Titre du Giveaways? = obligatoire
-question 2. Récompense du Giveaways ? = obligatoire
-question 3. Nombre de gagnant? = obligatoire
-question 4. Durée du giveaways? (m,h,d,w) exemple 1min,1heure,1day,1week {calcul depuis le moment du lancement avec timestap en footer qui actualise le temp restant}
+Un systeme de suggestion 
+une commande > set suggestion
+qui reprend un peu les paramettre de confession , a la difference 1. que le nom de la personne est affiché et non pas anonyme.
+on concerve une numérotation. 
+on permet a l'utulisateur de modifier la description et pas juste le bouton.
+chaque fois qu'une suggestion est envoyer le "pannel suggestion est renvoyer " 
+la description par defaut est : Merci de soumettre votre suggestion!
+IMPORTANT. LES BOUTON , ET TOUT NE DOIT PAS EXPIRER ET CE MEME SI LE BOT OFFLINE ET REVIENT ENLIGNE. les suggestion doivent pouvoir etre approuvé ou refusé.
 
-utulisateur clique sur > terminer dans le truc modal,
-le bot enregistre ses donné > 
-le bot demande en message text ephemere , Le titre du bouton? écrivé skip si vous souhaitez concever le bouton par défaut (participé).(les reponse dutulisateur sont suprimer par le bot quand il recoit l'information) l'utulisateur peux marquer autant un emoji custom de server qu'un texte le bouton doit accepter les emoji custom comme sa par eexemple : <:pikapika:1388448429486768140> , le mot pourrais aussi etre : participer<:pikapika:1388448429486768140>. 
-
-le bot demande alors toujours en mode ephemere dans quelle salon l'utulisateur souhaite envoyé le paneau de giveaways , une fois selectionné (menu selecteur + option recherche) le bot l'envoie.
-
-
-A noter : lorsque j'appuie la premiere fois sur le bouton le bot me dit : Vou participer maintenant a ce giveaways (et dois lenregistrer sur l'embed du giveaways) une 2 eme fois le bot me dit (vous ne participer plus a ce giveaways) 
-
-
-utulisé mongodb -> me dire la collection a ajouté 
-
-bouton supplementaire -> pour les membre qui on la perm ban member uniquement. le bouton est "annulé" et "reroll"(retiré un nouveau gagnant.) et le dernier "tirer maintenant" (permet de skip le temp initial d'attente)
-
-
-permission pour la commande : ban member.
+si approuvé/rejeté on rajoute a l'embed 
+approuvé par / refusé par le : ici la date et lheure.
+on change la couleur vert = approuver
+rouge = refusé
+la couleur de paramns = en attente aucune decision prise.
+les bouton approuver/refusé uniquement pour ceux qui on la perm administrateur 
+idem pour la commande /set suggestion 
+resume pour etre sur que ta bien compris avant de faire le code
