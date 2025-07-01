@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Web-font pour emojis colorés -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Emoji&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      margin: 0;
+      font-family: "Arial", sans-serif;
+      background: #36393f;
+      color: #fff;
+    }
+    .card {
+      width: 1024px;
+      padding: 20px;
+      background: #2f3136;
+      border-radius: 8px;
+      box-sizing: border-box;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    header img {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+    }
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      flex: 1;
+    }
+    .stats {
+      display: flex;
+      margin-top: 20px;
+    }
+    .panel {
+      flex: 1;
+      padding: 10px;
+      background: #2f3136;
+      margin: 0 10px;
+      border-radius: 6px;
+    }
+    canvas {
+      width: 100%;
+      height: 200px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <header>
+      <img src="{{ avatar_url }}" alt="Avatar" />
+      <h1>{{ username }}</h1>
+      <div style="text-align: right;">
+        <div>📨 <strong>{{ total_messages }}</strong></div>
+        <div>🔊 <strong>{{ total_voice }} min</strong></div>
+      </div>
+    </header>
+    <div class="stats">
+      <div class="panel">
+        <canvas id="chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    new Chart(document.getElementById("chart"), {
+      type: "line",
+      data: {
+        labels: {{ time_labels | safe }},
+        datasets: [
+          {
+            label: "Messages",
+            data: {{ message_data | safe }},
+            borderColor: "#7289DA",
+            backgroundColor: "rgba(114,137,218,0.3)",
+            fill: true,
+          },
+          {
+            label: "Vocale",
+            data: {{ voice_data | safe }},
+            borderColor: "#FF6384",
+            backgroundColor: "rgba(255,99,132,0.3)",
+            fill: true,
+          },
+        ],
+      },
+      options: {
+        scales: {
+          x: {
+            ticks: { color: "#7289DA" }
+          },
+          y: {
+            ticks: { color: "#7289DA" }
+          }
+        },
+        animation: false
+      }
+    });
+  </script>
+</body>
+</html>

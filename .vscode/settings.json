@@ -1,0 +1,11 @@
+{
+  // Pour forcer le mode Jinja+HTML sur vos templates
+  "files.associations": {
+    "templates/*.html": "jinja-html"
+  },
+  // Active la coloration et la validation Jinja
+  "jinja.enable": true,
+  "jinja.template.fileExtensions": ["html"],
+  // Désactive la validation JS dans les fichiers .html
+  "javascript.validate.enable": false
+}
