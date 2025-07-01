@@ -340,15 +340,6 @@ class ProfileCog(commands.Cog):
         else:
             raise error
 
-    @commands.command(name="profile_menu")
-    async def profile_menu(self, ctx: commands.Context):
-        embed = Embed(
-            title="Gestion de votre profil",
-            description="Cliquez pour gérer votre profil.",
-            color=discord.Color.green()
-        )
-        await ctx.send(embed=embed, view=ProfileActionsView(self.bot))
-
     @tasks.loop(hours=24)
     async def republish_profiles(self):
         for guild in self.bot.guilds:
