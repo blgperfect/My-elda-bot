@@ -1,116 +1,160 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Web-font pour emojis colorés -->
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Emoji&display=swap" rel="stylesheet" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { margin:0; font-family:"Arial",sans-serif; background:#36393f; color:#fff; }
-    .card { width:1024px; padding:20px; background:#2f3136; border-radius:8px; box-sizing:border-box; }
-    header { display:flex; align-items:center; gap:20px; margin-bottom:20px; }
-    header img { width:64px; height:64px; border-radius:50%; }
-    header .info { flex:1; }
-    header .info h1 { margin:0; font-size:32px; }
-    header .info .sub { color:#b4b4b4; font-size:14px; }
-    header .totals { text-align:right; }
-    header .totals div { margin-bottom:8px; }
-    header .totals small { display:block; color:#b4b4b4; }
-    header .totals strong { font-size:24px; }
-    .legend { text-align:center; margin-bottom:8px; }
-    .legend span { margin:0 15px; font-size:14px; }
-    .legend .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:middle; }
-    .graph { margin-bottom:20px; }
-    .panels-top, .panels-bottom { display:flex; gap:20px; }
-    .panel, .panel-simple { background:#2f3136; border-radius:6px; padding:12px; box-sizing:border-box; }
-    .panel { flex:1; position:relative; }
-    .panel .stripe { position:absolute; left:0; top:0; bottom:0; width:6px; border-radius:6px 0 0 6px; }
-    .panel h2, .panel-simple h3 { margin:0 0 10px; font-size:16px; font-weight:normal; }
-    .panel ul, .panel-simple ul { list-style:none; padding:0; margin:0; }
-    .panel ul li, .panel-simple ul li { display:flex; justify-content:space-between; margin-bottom:6px; font-size:14px; }
-    canvas { width:100%; height:300px; display:block; }
+    :root {
+      --bg-page: #f0f2f5;
+      --bg-card: #ffffff;
+      --border: #e0e0e0;
+      --primary: #7262ff;
+      --secondary: #ff8c94;
+      --text-main: #333;
+      --text-muted: #777;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      background: var(--bg-page);
+      font-family: "Segoe UI", sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .card {
+      width: 700px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 180px 1fr;
+    }
+    /* Colonne avatar */
+    .card .avatar-col {
+      background: var(--secondary);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .avatar-col img {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      border: 4px solid #fff;
+      object-fit: cover;
+    }
+    /* Colonne contenu */
+    .card .content-col {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .content-col h1 {
+      font-size: 24px;
+      color: var(--text-main);
+    }
+    .content-col .subtitle {
+      font-size: 16px;
+      color: var(--text-muted);
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .stat-box {
+      background: var(--bg-page);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+    .stat-box .label {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .stat-box .value {
+      font-size: 20px;
+      font-weight: bold;
+      color: var(--primary);
+    }
+    .footer {
+      margin-top: auto;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: right;
+    }
   </style>
 </head>
 <body>
   <div class="card">
-    <header>
-      <img src="{{ avatar_url }}" alt="Avatar">
-      <div class="info">
-        <h1>{{ username }}</h1>
-        <div class="sub">{{ server_name }}</div>
-      </div>
-      <div class="totals">
-        <div>📨 <strong>{{ total_messages }}</strong><small>Messages</small></div>
-        <div>🔊 <strong>{{ total_voice }} min</strong><small>Activité vocale</small></div>
-      </div>
-    </header>
-
-    <div class="legend">
-      <span><span class="dot" style="background:#7289DA"></span>Messages</span>
-      <span><span class="dot" style="background:#FF6384"></span>Vocale</span>
+    <!-- Avatar + nom -->
+    <div class="avatar-col">
+      <img src="{{ avatar_url }}" alt="Avatar de {{ username }}">
     </div>
-    <div class="graph">
-      <canvas id="chart"></canvas>
-    </div>
+    <div class="content-col">
+      <h1>{{ username }}</h1>
+      <div class="subtitle">{{ server_name }}</div>
 
-    <div class="panels-top">
-      <div class="panel">
-        <div class="stripe" style="background:#7289DA"></div>
-        <h2>🏆 Principaux canaux vocaux</h2>
-        <ul>
-          {% for name, duration in top_voice %}
-            <li><span>{{ loop.index }}. {{ name }}</span><span>{{ duration }}</span></li>
-          {% endfor %}
-        </ul>
+      <!-- Stats globales -->
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="label">🗨️ Total Messages</div>
+          <div class="value">{{ total_messages }}</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">🔊 Total Voix (min)</div>
+          <div class="value">{{ total_voice }}</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">📅 Inscrit le</div>
+          <div class="value">{{ joined_date }}</div>
+        </div>
       </div>
-      <div class="panel">
-        <div class="stripe" style="background:#FF6384"></div>
-        <h2>💬 Principaux canaux messages</h2>
-        <ul>
-          {% for name, count in top_msgs %}
-            <li><span>{{ loop.index }}. {{ name }}</span><span>{{ count }}</span></li>
-          {% endfor %}
-        </ul>
-      </div>
-    </div>
 
-    <div class="panels-bottom" style="margin-top:20px;">
-      <div class="panel-simple">
-        <h3>🔊 Vocale</h3>
-        <ul>
-          <li><span>1j</span><span>{{ v1 }} min</span></li>
-          <li><span>7j</span><span>{{ v7 }} min</span></li>
-          <li><span>14j</span><span>{{ v14 }} min</span></li>
-        </ul>
+      <!-- Evolution 1j / 7j / 14j -->
+      <h2 style="margin-top:16px; font-size:18px; color:var(--text-main)">Activité récente</h2>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="label">⏱️ Messages (24h)</div>
+          <div class="value">{{ m0 }}</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">⏱️ Messages (7j)</div>
+          <div class="value">{{ m7 }}</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">⏱️ Messages (14j)</div>
+          <div class="value">{{ m14 }}</div>
+        </div>
       </div>
-      <div class="panel-simple">
-        <h3>✉️ Messages</h3>
-        <ul>
-          <li><span>1j</span><span>{{ m1 }} Messages</span></li>
-          <li><span>7j</span><span>{{ m7 }} Messages</span></li>
-          <li><span>14j</span><span>{{ m14 }} Messages</span></li>
-        </ul>
+
+      <div class="stats-grid" style="margin-top:8px">
+        <div class="stat-box">
+          <div class="label">⏱️ Voix (24h)</div>
+          <div class="value">{{ v0 }}</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">⏱️ Voix (7j)</div>
+          <div class="value">{{ v7 }}</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">⏱️ Voix (14j)</div>
+          <div class="value">{{ v14 }}</div>
+        </div>
+      </div>
+
+      <div class="footer">
+        Généré le {{ generated_on }}
       </div>
     </div>
   </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    new Chart(document.getElementById("chart"), {
-      type: "line",
-      data: {
-        labels: {{ time_labels|safe }},
-        datasets: [
-          { label:"Messages", data:{{ message_data|safe }}, borderColor:"#7289DA", backgroundColor:"rgba(114,137,218,0.3)", fill:true, tension:0.3, pointRadius:4 },
-          { label:"Vocale",   data:{{ voice_data|safe }},   borderColor:"#FF6384", backgroundColor:"rgba(255,99,132,0.3)", fill:true, tension:0.3, pointRadius:4 }
-        ]
-      },
-      options: {
-        plugins:{ legend:{ display:false } },
-        scales:{ x:{ ticks:{ color:"#7289DA" } }, y:{ ticks:{ color:"#7289DA" } } },
-        animation:false
-      }
-    });
-  </script>
 </body>
 </html>

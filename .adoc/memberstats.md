@@ -18,9 +18,7 @@ def getChannelName(guild: discord.Guild, channel_id: int) -> str:
 # --- Setup Jinja2 ---
 template_env = jinja2.Environment(
     loader=jinja2.FileSystemLoader("templates"),
-    autoescape=jinja2.select_autoescape(["html"]),
-    trim_blocks=True,
-    lstrip_blocks=True
+    autoescape=jinja2.select_autoescape(["html"])
 )
 template = template_env.get_template("user_stats.html")
 
@@ -75,12 +73,12 @@ class MemberStats(commands.Cog):
         if not guild:
             return await interaction.followup.send("Cette commande doit être utilisée dans un serveur.", ephemeral=True)
 
-        # 1️⃣ Récupération des données
+        # 1. Récupération données MongoDB
         today = datetime.date.today()
         start_30 = today - datetime.timedelta(days=29)
         docs = await stats_collection.find({"guild_id": guild.id, "user_id": member.id}).to_list(length=None)
 
-        # 2️⃣ Séries quotidiennes
+        # 2. Séries temporelles (30 jours)
         daily_docs = [d for d in docs if d.get("type") == "daily" and d.get("date") >= start_30.isoformat()]
         dates = [start_30 + datetime.timedelta(days=i) for i in range(30)]
         msg_map = {d["date"]: d.get("msg_count", 0) for d in daily_docs}
@@ -92,46 +90,62 @@ class MemberStats(commands.Cog):
         total_msgs = sum(msg_counts)
         total_voice = sum(voice_mins)
 
-        # 3️⃣ Top canaux
+        # 3. Top 3 canaux messages / vocaux
         chan_docs = [d for d in docs if d.get("type") == "channel"]
-        # Pas utilisés dans cette carte, mais on garde la logique si besoin
+        top_msgs_docs = sorted([c for c in chan_docs if c.get("msg_count")], key=lambda x: x["msg_count"], reverse=True)[:3]
+        top_voice_docs = sorted([c for c in chan_docs if c.get("voice_seconds")], key=lambda x: x["voice_seconds"], reverse=True)[:3]
 
-        # 4️⃣ Activité récente
+        top_msgs = [(getChannelName(guild, c["channel_id"]), f"{c['msg_count']} Messages") for c in top_msgs_docs]
+        top_voice = [(getChannelName(guild, c["channel_id"]), f"{c['voice_seconds']//60} min") for c in top_voice_docs]
+
+        # 4. Variations 0j/1j/7j/14j
         def sum_last(n, data_map):
             return sum(data_map.get((today - datetime.timedelta(days=i)).isoformat(), 0) for i in range(n+1))
 
-        m0 = msg_map.get(today.isoformat(), 0)           # dernières 24h
-        m7 = sum_last(7, msg_map)                        # 7 jours
-        m14 = sum_last(14, msg_map)                      # 14 jours
+        m0 = msg_map.get(today.isoformat(), 0)         # aujourd’hui
+        m1 = sum_last(1, msg_map) - m0                 # hier
+        m7 = sum_last(7, msg_map) - m0 - m1            # 2–7 jours
+        m14 = sum_last(14, msg_map) - sum_last(7, msg_map)
 
-        v0 = voice_map.get(today.isoformat(), 0)
-        v7 = sum_last(7, voice_map)
-        v14 = sum_last(14, voice_map)
+        v0 = voice_map.get(today.isoformat(), 0)       # aujourd’hui
+        v1 = sum_last(1, voice_map) - v0               # hier
+        v7 = sum_last(7, voice_map) - v0 - v1
+        v14 = sum_last(14, voice_map) - sum_last(7, voice_map)
 
-        # 5️⃣ Rend le HTML
+        # 5. Définir les paliers pour les barres (évite division par zéro)
+        max_messages = max(1, total_msgs)
+        max_voice    = max(1, total_voice)
+
+        # 6. Render HTML avec Jinja2
         html = template.render(
             avatar_url     = member.display_avatar.url,
             username       = member.display_name,
             server_name    = guild.name,
-            joined_date    = member.joined_at.strftime("%d %b %Y"),
             total_messages = total_msgs,
             total_voice    = total_voice,
-            m0 = m0, m7 = m7, m14 = m14,
-            v0 = v0, v7 = v7, v14 = v14,
+            message_data   = msg_counts,
+            voice_data     = voice_mins,
+            time_labels    = [d.strftime("%b %d") for d in dates],
+            top_voice      = top_voice,
+            top_msgs       = top_msgs,
+            m0=m0, m1=m1, m7=m7, m14=m14,
+            v0=v0, v1=v1, v7=v7, v14=v14,
+            max_messages   = max_messages,
+            max_voice      = max_voice,
             generated_on   = datetime.datetime.utcnow().strftime("%d %B %Y à %H:%M")
         )
 
-        # 6️⃣ Capture headless Chrome avec Playwright
+        # 7. Capture headless Chrome avec Playwright
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(args=["--no-sandbox"])
-            page = await browser.new_page(viewport={"width": 700, "height": 400})
+            page = await browser.new_page(viewport={"width": 1024, "height": 900})
             await page.set_content(html, wait_until="networkidle")
             card = await page.query_selector(".card")
             png = await card.screenshot(omit_background=True)
             await browser.close()
 
-        # 7️⃣ Envoi du PNG
-        await interaction.followup.send(file=File(BytesIO(png), "profile_stats.png"))
+        # 8. Envoi du PNG final
+        await interaction.followup.send(file=File(BytesIO(png), 'stats.png'))
 
 
 async def setup(bot: commands.Bot) -> None:
