@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from discord.ui import View, ChannelSelect, Button
+from discord.ui import View, ChannelSelect, Button, Select
 
 # Import de la collection MongoDB dédiée
 from config.mongo import custom_voc_collection
@@ -50,7 +50,6 @@ class CustomVocView(View):
         )
         self.channel_select.callback = self.on_channel_selected
         self.add_item(self.channel_select)
-
         # Ré-ajouter les boutons
         self.btn_create.disabled = self.existing
         self.btn_delete.disabled = not self.existing
@@ -106,6 +105,61 @@ class CustomVocView(View):
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
         await interaction.response.edit_message(embed=embed, view=None)
 
+class PersonalConfigView(View):
+    """Menu pour configurer un salon personnel"""
+    def __init__(self, channel: discord.VoiceChannel):
+        super().__init__(timeout=None)
+        self.channel = channel
+        # Select pour limiter le nombre de membres
+        self.limit_select = Select(
+            placeholder="🔢 Limite de membres (0 = illimité)",
+            custom_id="personal_limit_select",
+            options=[discord.SelectOption(label=str(i), value=str(i)) for i in range(0, 11)],
+            min_values=1,
+            max_values=1
+        )
+        self.limit_select.callback = self.on_limit_selected
+        self.add_item(self.limit_select)
+        # Boutons renommer et statut
+        self.rename_button = Button(label="✏️ Renommer", style=discord.ButtonStyle.secondary, custom_id="personal_btn_rename")
+        self.status_button = Button(label="ℹ️ Statut", style=discord.ButtonStyle.secondary, custom_id="personal_btn_status")
+        self.add_item(self.rename_button)
+        self.add_item(self.status_button)
+        self.rename_button.callback = self.on_rename_clicked
+        self.status_button.callback = self.on_status_clicked
+
+    async def on_limit_selected(self, interaction: discord.Interaction, select: Select):
+        new_limit = int(select.values[0])
+        await self.channel.edit(user_limit=new_limit)
+        await interaction.response.send_message(f"🔢 Nombre max fixé à {new_limit}.", ephemeral=True)
+
+    async def on_rename_clicked(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(
+            discord.ui.Modal(
+                title="Renommer votre salon",
+                components=[
+                    discord.ui.TextInput(
+                        label="Nouveau nom",
+                        custom_id="rename_input",
+                        style=discord.TextStyle.short,
+                        max_length=100
+                    )
+                ],
+                callback=self.handle_rename_modal
+            )
+        )
+
+    async def handle_rename_modal(self, interaction: discord.Interaction):
+        new_name = interaction.data['components'][0]['components'][0]['value']
+        await self.channel.edit(name=new_name)
+        await interaction.response.send_message(f"✏️ Salon renommé en **{new_name}**.", ephemeral=True)
+
+    async def on_status_clicked(self, interaction: discord.Interaction, button: Button):
+        # Exemple de statut simple (tu peux enrichir)
+        await interaction.response.send_message(
+            f"🔔 Salon actif : {len(self.channel.members)} membre(s) connecté(s)", ephemeral=True
+        )
+
 class CustomVocCog(commands.Cog):
     """Cog pour gérer les salons vocaux personnalisés"""
 
@@ -133,34 +187,40 @@ class CustomVocCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before, after):
-        # Lorsque l'utilisateur rejoint le salon de création
-        if after.channel and before.channel != after.channel:
-            config = await custom_voc_collection.find_one({"guild_id": member.guild.id})
-            if config and after.channel.id == config["create_channel_id"]:
-                # Créer un salon personnalisé dans la catégorie configurée
-                category = member.guild.get_channel(config["category_id"])
-                new_channel = await member.guild.create_voice_channel(
-                    name=f"salon de {member.display_name}",
-                    category=category,
-                    user_limit=0,
-                    reason="Salon vocal custom"
-                )
-                # Transférer l'utilisateur dans le nouveau salon
-                await member.move_to(new_channel)
+        config = await custom_voc_collection.find_one({"guild_id": member.guild.id})
+        if not config:
+            return
+        # Création et transfert
+        if after.channel and after.channel.id == config["create_channel_id"]:
+            category = member.guild.get_channel(config["category_id"])
+            new_channel = await member.guild.create_voice_channel(
+                name=f"salon de {member.display_name}",
+                category=category,
+                user_limit=0,
+                reason="Salon vocal custom"
+            )
+            await member.move_to(new_channel)
+            # Envoi du menu de config personnel
+            view = PersonalConfigView(new_channel)
+            await new_channel.send(embed=discord.Embed(
+                title="Gestion de votre salon",
+                description=(
+                    "Utilisez ce menu pour configurer votre salon :\n"
+                    "• Choisissez une limite de membres.\n"
+                    "• Renommez votre salon.\n"
+                    "• Affichez le statut actuel."
+                ),
+                color=EMBED_COLOR
+            ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL), view=view)
 
-        # Lorsque le salon custom se vide, le supprimer
-        if before.channel and before.channel.category_id == (await custom_voc_collection.find_one({"guild_id": member.guild.id}))["category_id"]:
-            # Vérifier si le salon est vide
+        # Suppression automatique lorsque vide
+        if before.channel and before.channel.category_id == config["category_id"]:
             channel = before.channel
-            if isinstance(channel, discord.VoiceChannel) and len(channel.members) == 0:
-                # Ne pas supprimer le salon de création principal
-                config = await custom_voc_collection.find_one({"guild_id": member.guild.id})
-                if channel.id != config.get("create_channel_id"):
-                    await channel.delete(reason="Salon vocal custom vidé")
+            if isinstance(channel, discord.VoiceChannel) and len(channel.members) == 0 and channel.id != config.get("create_channel_id"):
+                await channel.delete(reason="Salon vocal custom vidé")
 
     @tasks.loop(minutes=10)
     async def cleanup_channels(self):
-        # Sécurise la suppression de salons oubliés (au cas où)
         async for config in custom_voc_collection.find({}):
             guild = self.bot.get_guild(config["guild_id"])
             if not guild:
