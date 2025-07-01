@@ -39,7 +39,6 @@ class ModLogView(View):
         return embed
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        # Autorise uniquement l'auteur initial
         return interaction.user.id == self.author_id
 
     @discord.ui.button(label="⬅️", style=discord.ButtonStyle.secondary)
@@ -60,7 +59,7 @@ class ModLogView(View):
 
 
 class Moderation(commands.Cog):
-    """Cog pour gérer ban/kick et logs globaux."""
+    """Cog pour gérer ban/kick et logs globaux avec respect de la hiérarchie."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -73,7 +72,18 @@ class Moderation(commands.Cog):
         user: discord.User,
         reason: str
     ):
-        # Exécuter le ban même si l'utilisateur n'est pas sur le serveur
+        # Vérification hiérarchie si présent en guild
+        target = interaction.guild.get_member(user.id)
+        if target:
+            if target == interaction.guild.owner or target.top_role >= interaction.user.top_role:
+                embed = discord.Embed(
+                    title=EMOJIS.get('ERROR', '❌') + " Hiérarchie",
+                    description="Vous ne pouvez pas bannir ce membre (hiérarchie trop haute).",
+                    color=EMBED_COLOR
+                )
+                embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
+                return await interaction.response.send_message(embed=embed)
+        # Tentative de ban
         try:
             await interaction.guild.ban(user, reason=reason)
         except discord.HTTPException as e:
@@ -84,8 +94,7 @@ class Moderation(commands.Cog):
             )
             embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
             return await interaction.response.send_message(embed=embed)
-
-        # Enregistrement en base
+        # Log en base
         await moderation_collection.update_one(
             {"_id": user.id},
             {"$push": {"actions": {
@@ -97,7 +106,7 @@ class Moderation(commands.Cog):
             }}},
             upsert=True
         )
-        # Embed de confirmation public
+        # Confirmation
         embed = discord.Embed(
             title=EMOJIS.get('CHECK', '✅') + " Utilisateur banni",
             description=f"{user.mention} banni pour :\n> {reason}",
@@ -115,6 +124,16 @@ class Moderation(commands.Cog):
         member: discord.Member,
         reason: str
     ):
+        # Vérification hiérarchie
+        if member == interaction.guild.owner or member.top_role >= interaction.user.top_role:
+            embed = discord.Embed(
+                title=EMOJIS.get('ERROR', '❌') + " Hiérarchie",
+                description="Vous ne pouvez pas expulser ce membre (hiérarchie trop haute).",
+                color=EMBED_COLOR
+            )
+            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
+            return await interaction.response.send_message(embed=embed)
+        # Tentative de kick
         try:
             await interaction.guild.kick(member, reason=reason)
         except discord.HTTPException as e:
@@ -125,7 +144,7 @@ class Moderation(commands.Cog):
             )
             embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
             return await interaction.response.send_message(embed=embed)
-
+        # Log en base
         await moderation_collection.update_one(
             {"_id": member.id},
             {"$push": {"actions": {
@@ -137,6 +156,7 @@ class Moderation(commands.Cog):
             }}},
             upsert=True
         )
+        # Confirmation
         embed = discord.Embed(
             title=EMOJIS.get('CHECK', '✅') + " Membre expulsé",
             description=f"{member.mention} expulsé pour :\n> {reason}",
@@ -162,7 +182,6 @@ class Moderation(commands.Cog):
             )
             embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
             return await interaction.response.send_message(embed=embed)
-
         entries = sorted(doc['actions'], key=lambda a: a['timestamp'], reverse=True)
         view = ModLogView(entries, interaction.user.id)
         await interaction.response.send_message(embed=view.make_embed(), view=view)
