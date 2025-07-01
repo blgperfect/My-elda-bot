@@ -24,11 +24,14 @@
       color: var(--text-main);
     }
 
-    /*— Conteneur global —*/
+    /*— Conteneur global ciblé par Playwright —*/
     .container {
       width: 1902px;
-      min-height: 1080px;
+      /* Hauteur auto pour coller au contenu, plus de vide en bas */
+      height: auto;
+      /* Padding réduit en bas pour limiter l’espace vide */
       padding: 0;
+      background: transparent;
     }
 
     /*— En-tête —*/
@@ -52,7 +55,6 @@
     }
     header .titles h1 {
       font-size: 48px;
-      color: var(--text-main);
     }
     header .titles .sub {
       margin-top: 4px;
@@ -63,6 +65,10 @@
       gap: 12px;
     }
     header .titles .sub span.icon { font-size: 20px; }
+    header .generated {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
 
     /*— Grille des cartes —*/
     .cards {
@@ -70,6 +76,7 @@
       grid-template-columns: repeat(3, 1fr);
       gap: 24px;
       padding: 40px;
+      padding-bottom: 20px; /* moins de padding bas */
     }
 
     /*— Style d’une carte —*/
@@ -77,6 +84,8 @@
       background: var(--bg-card);
       border-radius: 12px;
       padding: 24px;
+      /* Hauteur minimale pour “remplir” un peu plus le bloc */
+      min-height: 360px;
     }
     .card h2 {
       display: flex;
@@ -172,7 +181,7 @@
 
     <!-- Trois cartes -->
     <div class="cards">
-      <!-- 1️⃣ Top Active Users -->
+      <!-- Top Active Users -->
       <div class="card">
         <h2><span class="icon">👑</span>Top Active Users</h2>
         {% for u in users %}
@@ -192,7 +201,7 @@
         {% endfor %}
       </div>
 
-      <!-- 2️⃣ Top Active Text Channels -->
+      <!-- Top Active Text Channels -->
       <div class="card">
         <h2><span class="icon">💬</span>Top Active Text Channels</h2>
         {% for c in text_channels %}
@@ -208,7 +217,7 @@
         {% endfor %}
       </div>
 
-      <!-- 3️⃣ Top Active Voice Channels -->
+      <!-- Top Active Voice Channels -->
       <div class="card">
         <h2><span class="icon">🎤</span>Top Active Voice Channels</h2>
         {% for c in voice_channels %}
@@ -225,9 +234,8 @@
       </div>
     </div>
 
-    <!-- Footer -->
     <footer>
-      Construit Par Elda • {{ footer_text }}
+      Construit par Elda • {{ footer_text }}
     </footer>
   </div>
 </body>
