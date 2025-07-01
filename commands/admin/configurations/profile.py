@@ -51,16 +51,25 @@ async def render_profile_to_image(data: dict) -> BytesIO:
 
 
 
-class CreateProfileModal(discord.ui.Modal, title="Créer votre profil"):
+class CreateProfileModal(discord.ui.Modal, title="Créer / Modifier votre profil"):
     surname = discord.ui.TextInput(label="Surnom", max_length=100, required=False)
     age = discord.ui.TextInput(label="Âge", max_length=3, required=False)
     pronoun = discord.ui.TextInput(label="Pronom", max_length=20, required=False)
     birthday = discord.ui.TextInput(label="Anniversaire (JJ/MM/AAAA)", max_length=10, required=False)
     description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph, max_length=300, required=False)
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot, is_modify: bool = False, existing_doc: dict = None):
         super().__init__()
         self.bot = bot
+        self.is_modify = is_modify
+        self.existing_doc = existing_doc or {}
+        if is_modify and self.existing_doc:
+            # Pré-remplissage des champs
+            self.surname.default     = existing_doc.get("nickname", "")
+            self.age.default         = existing_doc.get("age", "")
+            self.pronoun.default     = existing_doc.get("pronoun", "")
+            self.birthday.default    = existing_doc.get("birthday", "")
+            self.description.default = existing_doc.get("description", "")
 
     async def on_submit(self, interaction: discord.Interaction):
         data = {
@@ -70,17 +79,19 @@ class CreateProfileModal(discord.ui.Modal, title="Créer votre profil"):
             "birthday": self.birthday.value,
             "description": self.description.value
         }
-        view = GenderSelectView(self.bot, data)
+        view = GenderSelectView(self.bot, data, is_modify=self.is_modify)
         await interaction.response.send_message(
             "Dernière étape : sélectionnez votre genre.", view=view, ephemeral=True
         )
 
 
+
 class GenderSelectView(discord.ui.View):
-    def __init__(self, bot: commands.Bot, data: dict):
+    def __init__(self, bot: commands.Bot, data: dict, is_modify: bool = False):
         super().__init__(timeout=None)
         self.bot = bot
         self.data = data
+        self.is_modify = is_modify
 
     @discord.ui.select(
         placeholder="Votre genre", custom_id="gender_select",
@@ -97,16 +108,24 @@ class GenderSelectView(discord.ui.View):
         user = interaction.user
         self.data["gender"] = select.values[0]
 
-        # Prevent duplicate
-        if await profile_collection.find_one({"guild_id": guild.id, "user_id": user.id}):
-            return await interaction.followup.send("❌ Vous avez déjà un profil.", ephemeral=True)
+        if self.is_modify:
+            # Modification
+            await profile_collection.find_one_and_update(
+                {"guild_id": guild.id, "user_id": user.id},
+                {"$set": self.data},
+                return_document=ReturnDocument.AFTER
+            )
+            await interaction.followup.send("✅ Votre profil a été **modifié** !", ephemeral=True)
+        else:
+            # Création
+            if await profile_collection.find_one({"guild_id": guild.id, "user_id": user.id}):
+                return await interaction.followup.send("❌ Vous avez déjà un profil.", ephemeral=True)
+            doc = {**self.data, "guild_id": guild.id, "user_id": user.id}
+            await profile_collection.insert_one(doc)
+            await interaction.followup.send("✅ Votre profil a été créé !", ephemeral=True)
 
-        # Save profile
-        doc = {**self.data, "guild_id": guild.id, "user_id": user.id}
-        await profile_collection.insert_one(doc)
-
-        # Generate image and send
-        buffer = await render_profile_to_image({"avatar_url": user.display_avatar.url, **self.data})
+        # Génération et envoi de l'image dans le salon configuré
+        buf = await render_profile_to_image({"avatar_url": user.display_avatar.url, **self.data})
         cfg = await profile_collection.find_one({"_id": f"config_{guild.id}"})
         channel_id = cfg.get(f"{self.data['gender']}_channel")
         channel = guild.get_channel(channel_id)
@@ -115,11 +134,11 @@ class GenderSelectView(discord.ui.View):
             emoji_obj = discord.PartialEmoji.from_str(emoji_str)
         except:
             emoji_obj = emoji_str
+
         like_view = LikeView(self.bot, guild.id, user.id, emoji_obj)
-        msg = await channel.send(file=File(buffer, "profile.png"), view=like_view)
+        msg = await channel.send(file=File(buf, "profile.png"), view=like_view)
         self.bot.add_view(like_view, message_id=msg.id)
 
-        await interaction.followup.send("✅ Votre profil a été créé !", ephemeral=True)
 
 
 class ProfileActionsView(discord.ui.View):
@@ -129,27 +148,28 @@ class ProfileActionsView(discord.ui.View):
 
     @discord.ui.button(label="Créer", style=discord.ButtonStyle.blurple, custom_id="profile_create")
     async def create_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CreateProfileModal(self.bot))
+        await interaction.response.send_modal(CreateProfileModal(self.bot, is_modify=False))
 
     @discord.ui.button(label="Modifier", style=discord.ButtonStyle.gray, custom_id="profile_modify")
     async def modify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        doc = await profile_collection.find_one({"guild_id": interaction.guild.id, "user_id": interaction.user.id})
+        doc = await profile_collection.find_one({
+            "guild_id": interaction.guild.id,
+            "user_id": interaction.user.id
+        })
         if not doc:
             return await interaction.response.send_message("❌ Pas de profil à modifier.", ephemeral=True)
-        modal = CreateProfileModal(self.bot)
-        modal.surname.default = doc.get("nickname", "")
-        modal.age.default = doc.get("age", "")
-        modal.pronoun.default = doc.get("pronoun", "")
-        modal.birthday.default = doc.get("birthday", "")
-        modal.description.default = doc.get("description", "")
-        await interaction.response.send_modal(modal)
+        await interaction.response.send_modal(CreateProfileModal(self.bot, is_modify=True, existing_doc=doc))
 
     @discord.ui.button(label="Supprimer", style=discord.ButtonStyle.red, custom_id="profile_delete")
     async def delete_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        res = await profile_collection.delete_one({"guild_id": interaction.guild.id, "user_id": interaction.user.id})
+        res = await profile_collection.delete_one({
+            "guild_id": interaction.guild.id,
+            "user_id": interaction.user.id
+        })
         if res.deleted_count == 0:
             return await interaction.response.send_message("❌ Pas de profil à supprimer.", ephemeral=True)
         await interaction.response.send_message("🗑️ Profil supprimé.", ephemeral=True)
+
 
 
 class ProfileSetupView(discord.ui.View):
