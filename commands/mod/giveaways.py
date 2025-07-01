@@ -15,11 +15,23 @@ from config.params import (
 )
 from config.mongo import giveaways_collection
 
-# Regex pour custom emoji Discord <:name:id>
-_EMOJI_RE = re.compile(r'<:(\w+):(\d+)>')
+# Regex pour custom emoji Discord <:name:id> ou <a:name:id>
+_EMOJI_RE = re.compile(r'<(a?):(\w+):(\d+)>')
+
+def parse_label_and_emoji(raw: str):
+    """
+    Comme dans confess.py : retourne (label, PartialEmoji|None) depuis raw.
+    """
+    m = _EMOJI_RE.search(raw)
+    if not m:
+        return raw, None
+    animated, name, id_str = m.groups()
+    pe = discord.PartialEmoji(name=name, id=int(id_str), animated=bool(animated))
+    clean = _EMOJI_RE.sub("", raw).strip()
+    return (clean or None), pe
+
 
 def parse_duration(text: str) -> timedelta:
-    """Convertit '10m', '2h', '1d', '1w' en timedelta, lève si format invalide."""
     unit = text[-1].lower()
     if unit not in ("m", "h", "d", "w"):
         raise ValueError("Unité invalide")
@@ -31,30 +43,6 @@ def parse_duration(text: str) -> timedelta:
         "w": timedelta(weeks=val),
     }[unit]
 
-def make_participate_button(label_raw: str) -> Button:
-    """
-    Crée un bouton "Participer":
-    - Si l'utilisateur a saisi **exactement** un custom emoji, on affiche un bouton emoji-only.
-    - Sinon, si un custom emoji apparaît dans le texte, on l'affiche à côté du label.
-    - Sinon, on affiche le label pur.
-    """
-    txt = label_raw.strip()
-    # 1) fullmatch emoji
-    m_full = _EMOJI_RE.fullmatch(txt)
-    if m_full:
-        name, eid = m_full.groups()
-        emoji = discord.PartialEmoji(name=name, id=int(eid))
-        return Button(style=discord.ButtonStyle.primary, custom_id="giveaway_participate", emoji=emoji)
-    # 2) emoji + texte
-    m_search = _EMOJI_RE.search(txt)
-    if m_search:
-        name, eid = m_search.groups()
-        emoji = discord.PartialEmoji(name=name, id=int(eid))
-        label = _EMOJI_RE.sub("", txt).strip() or None
-        return Button(style=discord.ButtonStyle.primary, custom_id="giveaway_participate", label=label, emoji=emoji)
-    # 3) pas d'emoji
-    return Button(style=discord.ButtonStyle.primary, custom_id="giveaway_participate", label=txt)
-
 
 class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
     titre   = TextInput(label="Titre du giveaway", required=True)
@@ -63,7 +51,7 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
     duree   = TextInput(label="Durée (m,h,d,w)", required=True, placeholder="ex: 10m")
 
     async def on_submit(self, interaction: discord.Interaction):
-        # 1) Validation
+        # Validation des entrées
         try:
             winners_count = int(self.winners.value)
             if winners_count < 1:
@@ -79,34 +67,26 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
                 "❌ Durée invalide (ex: 10m, 2h, 1d, 1w).", ephemeral=True
             )
 
-        # 2) Assemblage des données
         data = {
-            "title":       self.titre.value,
-            "reward":      self.reward.value,
-            "winners":     winners_count,
-            "duration":    self.duree.value,
-            "created_at":  datetime.now(timezone.utc),
+            "title": self.titre.value,
+            "reward": self.reward.value,
+            "winners": winners_count,
+            "duration": self.duree.value,
+            "created_at": datetime.now(timezone.utc),
             "participants": []
         }
 
-        # 3) Demande du label de bouton
+        # Récupérer le label de bouton
         await interaction.response.send_message(
-            f"{interaction.user.mention}, écris le label pour le bouton "
-            "(ou `skip` pour « Participer »)."
+            f"{interaction.user.mention}, écris le label pour le bouton (ou `skip` pour « Participer »)."
         )
         prompt = await interaction.original_response()
 
         def check_label(m: discord.Message):
-            return (
-                m.author.id == interaction.user.id and
-                m.channel.id == interaction.channel.id and
-                not m.author.bot
-            )
+            return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id and not m.author.bot
 
         try:
-            label_msg = await interaction.client.wait_for(
-                "message", check=check_label, timeout=60
-            )
+            label_msg = await interaction.client.wait_for("message", check=check_label, timeout=60)
         except asyncio.TimeoutError:
             await prompt.delete()
             return await interaction.channel.send("⏱️ Temps écoulé.", delete_after=10)
@@ -116,22 +96,17 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
         await prompt.delete()
         await label_msg.delete()
 
-        # 4) Sélecteur de salon
-        class GiveawayChannelSelect(ChannelSelect):
+        # Sélecteur de salon
+        class ChannelSelectView(ChannelSelect):
             def __init__(self):
-                super().__init__(
-                    placeholder="Choisissez un salon…",
-                    custom_id="giveaway_channel",
-                    channel_types=[discord.ChannelType.text],
-                    min_values=1, max_values=1
-                )
+                super().__init__(placeholder="Salon de publication…", custom_id="giveaway_channel",
+                                 channel_types=[discord.ChannelType.text], min_values=1, max_values=1)
 
-            async def callback(self, select_intr: discord.Interaction):
-                selected_chan = self.values[0]
-                chan: discord.TextChannel = select_intr.guild.get_channel(selected_chan.id)
+            async def callback(self, select_inter: discord.Interaction):
+                chan = select_inter.guild.get_channel(self.values[0].id)
                 data["channel_id"] = chan.id
 
-                # 5) Construire et envoyer l'embed
+                # Construire l'embed du giveaway
                 end = data["created_at"] + duration_delta
                 ts = int(end.timestamp())
                 embed = discord.Embed(
@@ -146,31 +121,16 @@ class GiveawayModal(Modal, title="📢 Lancer un Giveaway"):
                 )
                 embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-                # 6) Afficher la view finale
-                final_view = GiveawayView(data)
-                # Configurer dynamiquement le bouton Participer
-                temp_btn = make_participate_button(data["button_label"])
-                # Récupérer le bouton décoré dans la view
-                for child in final_view.children:
-                    if getattr(child, 'custom_id', None) == 'giveaway_participate':
-                        child.label = temp_btn.label
-                        child.emoji = temp_btn.emoji
-                        break
-                msg = await chan.send(embed=embed, view=final_view)
-
-                # 7) Sauvegarder en DB
+                # Envoyer avec la view finale
+                view = GiveawayView(data)
+                msg = await chan.send(embed=embed, view=view)
                 data["_id"] = msg.id
                 await giveaways_collection.insert_one(data)
+                await select_inter.response.edit_message(content=f"✅ Giveaway créé dans {chan.mention}!", view=None)
 
-                await select_intr.response.edit_message(
-                    content=f"✅ Giveaway créé dans {chan.mention} !", view=None
-                )
-
-        sel_view = View(timeout=None)
-        sel_view.add_item(GiveawayChannelSelect())
-        await interaction.channel.send(
-            f"{interaction.user.mention}, dans quel salon envoyer le giveaway ?", view=sel_view
-        )
+        view = View(timeout=None)
+        view.add_item(ChannelSelectView())
+        await interaction.channel.send(f"{interaction.user.mention}, choisis le salon :", view=view)
 
 
 class GiveawayView(View):
@@ -178,8 +138,34 @@ class GiveawayView(View):
         super().__init__(timeout=None)
         self.data = data
 
-    @discord.ui.button(custom_id="giveaway_participate", style=discord.ButtonStyle.primary)
-    async def participate(self, interaction: discord.Interaction, button: Button):
+        # Bouton Participer
+        raw = data.get("button_label", "Participer")
+        label, emoji = parse_label_and_emoji(raw)
+        btn_part = Button(label=label, emoji=emoji, style=discord.ButtonStyle.primary,
+                          custom_id="giveaway_participate")
+        btn_part.callback = self.participate
+        self.add_item(btn_part)
+
+        # Boutons modération
+        btn_cancel = Button(label="Annuler", style=discord.ButtonStyle.danger, custom_id="giveaway_cancel")
+        btn_cancel.callback = self.cancel
+        self.add_item(btn_cancel)
+
+        btn_reroll = Button(label="Reroll", style=discord.ButtonStyle.secondary, custom_id="giveaway_reroll")
+        btn_reroll.callback = self.reroll
+        self.add_item(btn_reroll)
+
+        btn_draw = Button(label="Tirer Maintenant", style=discord.ButtonStyle.success, custom_id="giveaway_draw")
+        btn_draw.callback = self.draw_now
+        self.add_item(btn_draw)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        cid = interaction.data.get("custom_id", "")
+        if cid in ("giveaway_cancel", "giveaway_reroll", "giveaway_draw") and not interaction.user.guild_permissions.ban_members:
+            return await interaction.response.send_message("❌ Vous n'avez pas la permission.", ephemeral=True)
+        return True
+
+    async def participate(self, interaction: discord.Interaction):
         uid = interaction.user.id
         parts = self.data["participants"]
         if uid in parts:
@@ -188,18 +174,14 @@ class GiveawayView(View):
         else:
             parts.append(uid)
             await interaction.response.send_message("✅ Vous participez !", ephemeral=True)
-        await giveaways_collection.update_one(
-            {"_id": self.data["_id"]}, {"$set": {"participants": parts}}
-        )
+        await giveaways_collection.update_one({"_id": self.data["_id"]}, {"$set": {"participants": parts}})
 
-    @discord.ui.button(custom_id="giveaway_cancel", label="Annuler", style=discord.ButtonStyle.danger)
-    async def cancel(self, interaction: discord.Interaction, button: Button):
+    async def cancel(self, interaction: discord.Interaction):
         await interaction.message.delete()
         await giveaways_collection.delete_one({"_id": self.data["_id"]})
         await interaction.response.send_message("🚫 Giveaway annulé.", ephemeral=True)
 
-    @discord.ui.button(custom_id="giveaway_reroll", label="Reroll", style=discord.ButtonStyle.secondary)
-    async def reroll(self, interaction: discord.Interaction, button: Button):
+    async def reroll(self, interaction: discord.Interaction):
         doc = await giveaways_collection.find_one({"_id": self.data["_id"]})
         parts = doc.get("participants", [])
         if not parts:
@@ -207,8 +189,7 @@ class GiveawayView(View):
         winner = random.choice(parts)
         await interaction.response.send_message(f"🎉 Nouveau gagnant : <@{winner}>", ephemeral=False)
 
-    @discord.ui.button(custom_id="giveaway_draw", label="Tirer Maintenant", style=discord.ButtonStyle.success)
-    async def draw_now(self, interaction: discord.Interaction, button: Button):
+    async def draw_now(self, interaction: discord.Interaction):
         doc = await giveaways_collection.find_one({"_id": self.data["_id"]})
         parts = doc.get("participants", [])
         if len(parts) < self.data["winners"]:
@@ -217,9 +198,7 @@ class GiveawayView(View):
         embed = interaction.message.embeds[0]
         embed.add_field(name="🎊 Gagnants", value=", ".join(f"<@{w}>" for w in winners), inline=False)
         await interaction.message.edit(embed=embed, view=None)
-        await giveaways_collection.update_one(
-            {"_id": self.data["_id"]}, {"$set": {"winners_list": winners}}
-        )
+        await giveaways_collection.update_one({"_id": self.data["_id"]}, {"$set": {"winners_list": winners}})
         await interaction.response.send_message("✅ Tirage effectué !", ephemeral=True)
 
 
@@ -252,9 +231,7 @@ class GiveawayCog(commands.Cog):
     @app_commands.default_permissions(ban_members=True)
     @app_commands.guild_only()
     async def giveaway(self, interaction: discord.Interaction):
-        """Lance le modal de création (visible seulement aux ban_members)."""
         await interaction.response.send_modal(GiveawayModal())
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(GiveawayCog(bot))
