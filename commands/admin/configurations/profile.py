@@ -221,6 +221,20 @@ class ProfileSetupView(discord.ui.View):
             {"$set": {"emoji": emoji}},
             return_document=ReturnDocument.AFTER
         )
+
+        # Envoyer le menu de profil dans le salon de création
+        create_ch_id = self.config.get("create_channel")
+        if create_ch_id:
+            create_channel = interaction.guild.get_channel(create_ch_id)
+            if create_channel:
+                from discord import Embed
+                menu_embed = Embed(
+                    title="Gestion de votre profil",
+                    description="Cliquez sur les boutons ci-dessous pour gérer votre profil.",
+                    color=discord.Color.green()
+                )
+                await create_channel.send(embed=menu_embed, view=ProfileActionsView(self.bot))
+
         await interaction.followup.send(f"✅ Configuration terminée avec l'emoji : {emoji}", ephemeral=True)
 
 class LikeView(discord.ui.View):
