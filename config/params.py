@@ -1,7 +1,10 @@
 #complété
 
 # === Lien top.gg
-TOPGG = "FUTUR LIEN QUI SERAS MIS ICI"
+TOPGG = "https://top.gg/bot/1351415146639134832?s=08ff278d98260"
+SUPPORT_INVITE = "https://discord.gg/b6PbxtUWNk"
+TUTO_YTB = "https://youtube.com/@eldabot?si=3qciRBpP9A5Wx-6E"
+BOT_INVITE = ""
 
 # === Apparence des embeds ===
 EMBED_COLOR = 0xE3BAE8
