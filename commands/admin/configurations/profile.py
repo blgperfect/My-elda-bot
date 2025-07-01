@@ -64,9 +64,7 @@ class CreateProfileModal(discord.ui.Modal, title="Créer votre profil"):
         }
         view = GenderSelectView(self.bot, data)
         await interaction.response.send_message(
-            "Dernière étape : sélectionnez votre genre.",
-            view=view,
-            ephemeral=True
+            "Dernière étape : sélectionnez votre genre.", view=view, ephemeral=True
         )
 
 
@@ -77,10 +75,8 @@ class GenderSelectView(discord.ui.View):
         self.data = data
 
     @discord.ui.select(
-        placeholder="Votre genre",
-        custom_id="gender_select",
-        min_values=1,
-        max_values=1,
+        placeholder="Votre genre", custom_id="gender_select",
+        min_values=1, max_values=1,
         options=[
             discord.SelectOption(label="Femme", value="female"),
             discord.SelectOption(label="Homme", value="male"),
@@ -183,29 +179,21 @@ class ProfileSetupView(discord.ui.View):
         self.add_item(confirm_button)
 
     async def _confirm(self, interaction: discord.Interaction):
-        await profile_collection.update_one(
-            {"_id": f"config_{interaction.guild.id}"},
-            {"$set": self.config},
-            upsert=True
-        )
+        await profile_collection.update_one({"_id": f"config_{interaction.guild.id}"},
+            {"$set": self.config}, upsert=True)
         await interaction.response.send_message("Envoyez maintenant l'emoji custom (ou tapez `skip` pour 💖).", ephemeral=True)
 
-        def check(m: discord.Message):
-            return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id
+        def check(m: discord.Message): return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id
 
         try:
             msg = await interaction.client.wait_for("message", timeout=60.0, check=check)
             emoji = msg.content.strip()
-            if emoji.lower() == "skip":
-                emoji = "💖"
+            if emoji.lower() == "skip": emoji = "💖"
         except asyncio.TimeoutError:
             emoji = "💖"
 
-        await profile_collection.find_one_and_update(
-            {"_id": f"config_{interaction.guild.id}"},
-            {"$set": {"emoji": emoji}},
-            return_document=ReturnDocument.AFTER
-        )
+        await profile_collection.find_one_and_update({"_id": f"config_{interaction.guild.id}"},
+            {"$set": {"emoji": emoji}}, return_document=ReturnDocument.AFTER)
 
         # Send menu in create channel
         create_id = self.config.get("create_channel")
@@ -239,15 +227,17 @@ class LikeView(discord.ui.View):
             return await interaction.followup.send("❌ Vous ne pouvez pas liker votre propre profil.", ephemeral=True)
         if not await profile_collection.find_one({"guild_id": self.guild_id, "user_id": liker.id}):
             return await interaction.followup.send("❌ Vous devez avoir un profil pour liker.", ephemeral=True)
-        buffer = await render_profile_to_image({"avatar_url": liker.display_avatar.url, **await profile_collection.find_one({"guild_id": self.guild_id, "user_id": liker.id})})
+        buffer = await render_profile_to_image({
+            "avatar_url": liker.display_avatar.url,
+            **await profile_collection.find_one({"guild_id": self.guild_id, "user_id": liker.id})
+        })
         guild = self.bot.get_guild(self.guild_id)
         owner = guild.get_member(self.owner_id) or await guild.fetch_member(self.owner_id)
         dm = await owner.create_dm()
         ar_view = AcceptRejectView(self.bot, self.guild_id, self.owner_id, liker.id)
         msg = await dm.send(
             content=f"💌 Votre profil a été liké par **{liker.display_name}**.",
-            file=File(buffer, "like.png"),
-            view=ar_view
+            file=File(buffer, "like.png"), view=ar_view
         )
         self.bot.add_view(ar_view, message_id=msg.id)
         await interaction.followup.send("👍 Like envoyé !", ephemeral=True)
@@ -267,12 +257,10 @@ class AcceptRejectView(discord.ui.View):
             return await interaction.response.send_message("❌ Non autorisé.", ephemeral=True)
         owner = await self.bot.fetch_user(self.owner_id)
         liker = await self.bot.fetch_user(self.liker_id)
-        # Create DM channels and send messages
         owner_dm = await owner.create_dm()
         liker_dm = await liker.create_dm()
-        await liker_dm.send(f"✅ **{owner.display_name}** a accepté votre like.")
-        await owner_dm.send(f"✅ Vous avez accepté le like de {liker.display_name}.")
-        # Disable buttons
+        await liker_dm.send(f"✅ **{owner.name}#{owner.discriminator}** a accepté votre like.")
+        await owner_dm.send(f"✅ Vous avez accepté le like de **{liker.name}#{liker.discriminator}**.")
         for child in self.children:
             child.disabled = True
         await interaction.message.edit(view=self)
@@ -281,8 +269,15 @@ class AcceptRejectView(discord.ui.View):
     async def refuse(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.owner_id:
             return await interaction.response.send_message("❌ Non autorisé.", ephemeral=True)
+        owner = await self.bot.fetch_user(self.owner_id)
         liker = await self.bot.fetch_user(self.liker_id)
-        await liker.create_dm().send("❌ Votre like n'a pas été retenu.")
+        # Send refusal DM to liker
+        liker_dm = await liker.create_dm()
+        await liker_dm.send(f"❌ La personne que vous avez aimé n'a pas retenu votre like.")
+        # Send confirmation DM to owner
+        owner_dm = await owner.create_dm()
+        await owner_dm.send(f"❌ Vous avez refusé le like de ** la personne qui vous a aimée**.")
+        # Disable buttons
         for child in self.children:
             child.disabled = True
         await interaction.message.edit(view=self)
@@ -319,7 +314,11 @@ class ProfileCog(commands.Cog):
 
     @commands.command(name="profile_menu")
     async def profile_menu(self, ctx: commands.Context):
-        embed = Embed(title="Gestion de votre profil", description="Cliquez pour gérer votre profil.", color=discord.Color.green())
+        embed = Embed(
+            title="Gestion de votre profil",
+            description="Cliquez pour gérer votre profil.",
+            color=discord.Color.green()
+        )
         await ctx.send(embed=embed, view=ProfileActionsView(self.bot))
 
     @tasks.loop(hours=24)
