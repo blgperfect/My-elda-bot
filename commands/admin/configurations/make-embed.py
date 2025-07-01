@@ -53,19 +53,16 @@ class EmbedBuilderView(discord.ui.View):
     @discord.ui.button(label="Envoyer", style=discord.ButtonStyle.success)
     async def send_button(self, inter: discord.Interaction, button: discord.ui.Button):
         await inter.response.defer()
+        # Envoi de l'embed
         await self.destination.send(embed=self.build_embed())
+        # Sauvegarde en DB
         if self.save_name:
             guild_id = self.interaction.guild_id
             total = await embed_collection.count_documents({"guild": guild_id})
             if total >= MAX_SAVED:
                 await inter.followup.send(f"Limite atteinte : {MAX_SAVED} embeds maximum.", ephemeral=True)
             else:
-                await embed_collection.insert_one({
-                    "guild": guild_id,
-                    "name": self.save_name,
-                    "channel": self.destination.id,
-                    "data": self.embed_data
-                })
+                await embed_collection.insert_one({"guild": guild_id, "name": self.save_name, "channel": self.destination.id, "data": self.embed_data})
                 await inter.followup.send(f"Embed sauvegardé sous `{self.save_name}`.", ephemeral=True)
         try:
             await inter.edit_original_response(content="✅ Embed envoyé.", embed=None, view=None)
@@ -76,7 +73,7 @@ class EmbedBuilderView(discord.ui.View):
     async def edit_title(self, inter: discord.Interaction, button: discord.ui.Button):
         class TitleModal(discord.ui.Modal, title="Modifier le titre"):
             title_input = discord.ui.TextInput(label="Titre", required=False, max_length=256)
-            def __init__(self, parent):
+            def __init__(self, parent: EmbedBuilderView):
                 super().__init__()
                 self.parent = parent
             async def on_submit(self, modal_interaction: discord.Interaction):
@@ -88,7 +85,7 @@ class EmbedBuilderView(discord.ui.View):
     async def edit_description(self, inter: discord.Interaction, button: discord.ui.Button):
         class DescModal(discord.ui.Modal, title="Modifier la description"):
             desc_input = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph, required=False)
-            def __init__(self, parent):
+            def __init__(self, parent: EmbedBuilderView):
                 super().__init__()
                 self.parent = parent
             async def on_submit(self, modal_interaction: discord.Interaction):
@@ -102,7 +99,7 @@ class EmbedBuilderView(discord.ui.View):
             name = discord.ui.TextInput(label="Nom du champ", required=True)
             value = discord.ui.TextInput(label="Valeur du champ", style=discord.TextStyle.paragraph, required=True)
             inline = discord.ui.TextInput(label="Inline (True/False)", required=True)
-            def __init__(self, parent):
+            def __init__(self, parent: EmbedBuilderView):
                 super().__init__()
                 self.parent = parent
             async def on_submit(self, modal_interaction: discord.Interaction):
@@ -115,7 +112,7 @@ class EmbedBuilderView(discord.ui.View):
     async def edit_color(self, inter: discord.Interaction, button: discord.ui.Button):
         class ColorModal(discord.ui.Modal, title="Modifier la couleur"):
             color_input = discord.ui.TextInput(label="Hex (ex : #FF0000)", required=True, max_length=7)
-            def __init__(self, parent):
+            def __init__(self, parent: EmbedBuilderView):
                 super().__init__()
                 self.parent = parent
             async def on_submit(self, modal_interaction: discord.Interaction):
@@ -131,7 +128,7 @@ class EmbedBuilderView(discord.ui.View):
     async def edit_thumbnail(self, inter: discord.Interaction, button: discord.ui.Button):
         class ThumbModal(discord.ui.Modal, title="URL de la vignette"):
             url_input = discord.ui.TextInput(label="URL", required=False)
-            def __init__(self, parent):
+            def __init__(self, parent: EmbedBuilderView):
                 super().__init__()
                 self.parent = parent
             async def on_submit(self, modal_interaction: discord.Interaction):
@@ -146,7 +143,7 @@ class EmbedBuilderView(discord.ui.View):
     async def edit_image(self, inter: discord.Interaction, button: discord.ui.Button):
         class ImageModal(discord.ui.Modal, title="URL de l'image"):
             url_input = discord.ui.TextInput(label="URL", required=False)
-            def __init__(self, parent):
+            def __init__(self, parent: EmbedBuilderView):
                 super().__init__()
                 self.parent = parent
             async def on_submit(self, modal_interaction: discord.Interaction):
@@ -161,7 +158,7 @@ class EmbedBuilderView(discord.ui.View):
     async def edit_footer(self, inter: discord.Interaction, button: discord.ui.Button):
         class FooterModal(discord.ui.Modal, title="Texte du footer"):
             text_input = discord.ui.TextInput(label="Footer", required=False, max_length=2048)
-            def __init__(self, parent):
+            def __init__(self, parent: EmbedBuilderView):
                 super().__init__()
                 self.parent = parent
             async def on_submit(self, modal_interaction: discord.Interaction):
@@ -183,18 +180,29 @@ class EmbedBuilderView(discord.ui.View):
         await self.update_message(inter)
 
 class EmbedPaginatorView(discord.ui.View):
-    def __init__(self, embeds: list[discord.Embed], author: discord.Member):
+    def __init__(self, docs: list[dict], author: discord.Member):
         super().__init__(timeout=None)
-        self.embeds = embeds
+        self.docs = docs
+        self.embeds = []
+        for d in docs:
+            data = d.get("data", d.get("embed", {}))
+            e = discord.Embed(color=data.get("color", EMBED_COLOR))
+            if data.get("title"): e.title = data["title"]
+            if data.get("description"): e.description = data["description"]
+            for fn, fv, fi in data.get("fields", []): e.add_field(name=fn, value=fv, inline=fi)
+            if data.get("thumbnail"): e.set_thumbnail(url=data["thumbnail"])
+            if data.get("image"): e.set_image(url=data["image"])
+            e.set_footer(text=f"Nom : {d['name']}")
+            self.embeds.append(e)
         self.index = 0
         self.author = author
         self.prev_button.disabled = True
-        self.next_button.disabled = len(embeds) <= 1
+        self.next_button.disabled = len(self.embeds) <= 1
+        self.delete_button.disabled = False
 
     @discord.ui.button(label="⬅️", style=discord.ButtonStyle.secondary)
     async def prev_button(self, inter: discord.Interaction, button: discord.ui.Button):
-        if inter.user != self.author:
-            return await inter.response.defer()
+        if inter.user != self.author: return await inter.response.defer()
         self.index -= 1
         self.next_button.disabled = False
         self.prev_button.disabled = self.index == 0
@@ -202,12 +210,22 @@ class EmbedPaginatorView(discord.ui.View):
 
     @discord.ui.button(label="➡️", style=discord.ButtonStyle.secondary)
     async def next_button(self, inter: discord.Interaction, button: discord.ui.Button):
-        if inter.user != self.author:
-            return await inter.response.defer()
+        if inter.user != self.author: return await inter.response.defer()
         self.index += 1
         self.prev_button.disabled = False
         self.next_button.disabled = self.index == len(self.embeds)-1
         await inter.response.edit_message(embed=self.embeds[self.index], view=self)
+
+    @discord.ui.button(label="🗑️ Supprimer", style=discord.ButtonStyle.danger)
+    async def delete_button(self, inter: discord.Interaction, button: discord.ui.Button):
+        if inter.user != self.author: return await inter.response.defer()
+        # Suppression en DB
+        doc = self.docs[self.index]
+        await embed_collection.delete_one({"guild": inter.guild_id, "name": doc['name']})
+        # Désactiver les boutons
+        for child in self.children:
+            child.disabled = True
+        await inter.response.edit_message(content=f"✅ Embed `{doc['name']}` supprimé.", view=self)
 
 class EmbedCog(commands.Cog):
     """Cog pour création et gestion rapide des embeds."""
@@ -220,9 +238,7 @@ class EmbedCog(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     async def make_embed(self, interaction: discord.Interaction, channel: discord.TextChannel, name: str | None = None):
         view = EmbedBuilderView(interaction, channel, save_name=name)
-        await interaction.response.send_message(
-            content="Ce menu expirera dans 15 minutes.", embed=view.build_embed(), view=view
-        )
+        await interaction.response.send_message(content="Ce menu expirera dans 15 minutes.", embed=view.build_embed(), view=view)
 
     @app_commands.command(name="list_embeds", description="Afficher et gérer les embeds sauvegardés.")
     @app_commands.default_permissions(administrator=True)
@@ -231,21 +247,8 @@ class EmbedCog(commands.Cog):
         docs = await embed_collection.find({"guild": interaction.guild_id}).to_list(length=None)
         if not docs:
             return await interaction.response.send_message("Aucun embed enregistré.", ephemeral=True)
-
-        embeds = []
-        for d in docs:
-            data = d.get("data", d.get("embed", {}))
-            e = discord.Embed(color=data.get("color", EMBED_COLOR))
-            if data.get("title"): e.title = data["title"]
-            if data.get("description"): e.description = data["description"]
-            for fn, fv, fi in data.get("fields", []): e.add_field(name=fn, value=fv, inline=fi)
-            if data.get("thumbnail"): e.set_thumbnail(url=data["thumbnail"])
-            if data.get("image"): e.set_image(url=data["image"])
-            e.set_footer(text=f"Nom : {d['name']}")
-            embeds.append(e)
-
-        view = EmbedPaginatorView(embeds, interaction.user)
-        await interaction.response.send_message(embed=embeds[0], view=view)
+        view = EmbedPaginatorView(docs, interaction.user)
+        await interaction.response.send_message(embed=view.embeds[0], view=view)
 
     @make_embed.error
     @list_embeds.error
