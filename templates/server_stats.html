@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    /* Reset et fond */
+    body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      color: #fff;
+      font-family: "Arial", sans-serif;
+    }
+    /* Conteneur principal ciblé par Playwright */
+    .container {
+      width: 1902px;
+      height: 1080px;
+      padding: 40px;
+      box-sizing: border-box;
+      position: relative;
+      background: #36393f;
+    }
+    /* En-tête */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 48px;
+    }
+    .header .sub {
+      font-size: 24px;
+      color: #b4b4b4;
+    }
+    /* Colonnes */
+    .columns {
+      display: flex;
+      gap: 20px;
+      height: calc(100% - 160px);
+    }
+    .column {
+      flex: 1;
+      background: #2f3136;
+      border-radius: 12px;
+      padding: 20px;
+      box-sizing: border-box;
+      overflow: auto;
+    }
+    .column h2 {
+      margin: 0 0 20px;
+      font-size: 24px;
+      border-bottom: 1px solid #444;
+      padding-bottom: 10px;
+    }
+    /* Items */
+    .list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .rank {
+      width: 36px;
+      font-size: 20px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .rank-1 { color: #FFD700; }
+    .rank-2 { color: #C0C0C0; }
+    .rank-3 { color: #CD7F32; }
+    .avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      margin: 0 12px;
+      flex-shrink: 0;
+    }
+    .info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .info .name {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 500;
+    }
+    .info .detail {
+      margin: 4px 0 0;
+      font-size: 14px;
+      color: #b4b4b4;
+    }
+    .stat, .channel-icon {
+      font-size: 18px;
+      margin-left: 12px;
+      flex-shrink: 0;
+    }
+    .channel-icon {
+      font-size: 24px;
+    }
+    /* Pied de page */
+    .footer {
+      position: absolute;
+      bottom: 20px;
+      left: 40px;
+      right: 40px;
+      text-align: center;
+      font-size: 14px;
+      color: #b4b4b4;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h1>Statistiques de {{ guild_name }}</h1>
+        <div class="sub">{{ member_count }} membres • Top Activité</div>
+      </div>
+      <div class="sub">Généré le {{ generated_on }}</div>
+    </div>
+
+    <div class="columns">
+      <!-- Top Users -->
+      <div class="column">
+        <h2>🏆 Top Active Users</h2>
+        {% for u in users %}
+        <div class="list-item">
+          <div class="rank rank-{{ u.rank }}">{{ u.rank }}</div>
+          <img class="avatar" src="{{ u.avatar_url }}" alt="Avatar">
+          <div class="info">
+            <p class="name">@{{ u.username }}</p>
+            <p class="detail">{{ u.total_msgs }} messages • {{ u.total_voice_min }} min voix</p>
+          </div>
+          <div class="stat">{{ u.total_msgs }}</div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Top Text Channels -->
+      <div class="column">
+        <h2>💬 Top Channels Textuels</h2>
+        {% for c in text_channels %}
+        <div class="list-item">
+          <div class="rank rank-{{ c.rank }}">{{ c.rank }}</div>
+          <div class="channel-icon">{{ c.icon }}</div>
+          <div class="info">
+            <p class="name">{{ c.name }}</p>
+            <p class="detail">Catégorie : {{ c.category }}</p>
+          </div>
+          <div class="stat">{{ c.stat_label }}</div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Top Voice Channels -->
+      <div class="column">
+        <h2>🎤 Top Channels Vocaux</h2>
+        {% for c in voice_channels %}
+        <div class="list-item">
+          <div class="rank rank-{{ c.rank }}">{{ c.rank }}</div>
+          <div class="channel-icon">{{ c.icon }}</div>
+          <div class="info">
+            <p class="name">{{ c.name }}</p>
+            <p class="detail">Catégorie : {{ c.category }}</p>
+          </div>
+          <div class="stat">{{ c.stat_label }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="footer">
+      Powered by Elda-Bot
+    </div>
+  </div>
+</body>
+</html>
