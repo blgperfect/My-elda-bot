@@ -1,10 +1,6 @@
 {
-  "files.associations": {
-    // On traite tous les HTML sous templates/ comme du Jinja+HTML
-    "templates/*.html": "jinja-html"
-  },
+  "files.associations": { "templates/*.html": "jinja-html" },
   "jinja.enable": true,
   "jinja.template.fileExtensions": ["html"],
-  // On coupe la validation JS dans les .html
   "javascript.validate.enable": false
 }
