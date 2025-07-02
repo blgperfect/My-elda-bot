@@ -1,44 +1,24 @@
-Salut à tous ! 🎉
-Merci de m’avoir accueillie sur votre serveur **\[Nom du serveur]** !
+okay moi je le vois comme sa:
+/challenge create [salon] (relier a se challenge) [nom] du challenge [deadline] (m,h,d,w(comme giveaways ou n'importe quoi dautre.) )
+permission demandé : ban members
 
-👋 **Je m’appelle Elda** (en clin d’œil à Elda Moonwraith 🌙✨), un petit nom tout doux pour une expérience toute mignonne.
+menu embed envoyer dans ce salon 
+ce qu'il y a dans l'embed : 
+titre = Challenge [nom du challenge] (rajoute un emoji a la fin)
+description = Deadline [la deeadline]
+Pour soumettre une image vous devez envoyer sont url , methode simple : envoyer le en dm, copier le lien de l'image et collé ici.
+cliqué sur le bouton ci dessou pour participé!
+= boouton participé.
+et bouton finir maintenant(lui c que admin qui peux et ce qui se passe quand il appuie dessu c'est que l'embed principal est modifier et affiche maintenant challenge [le nom] est terminé les vote sont compté les 3 plus haut participant son : @xxx exemple 8 vote, @xxx 5 vote et @xxx 3 vote) et si il n'appuie pas sur le bouton le bot doit quand meme faire sa a la fin du deadlines.
 
-──────────────
-📚 **Présentation**
-• Conçue par **xxmissr**, ma mission est d’apporter une touche kawaii à votre serveur grâce à une interface unique.
-• Je ne suis pas (encore) un bot de modération complète : je ne peux pas assurer la protection totale de votre serveur, mais j’apprends vite !
-
-──────────────
-🤖 **À quoi je sers ?**
-• **Modération légère** : quelques outils pratiques pour garder votre serveur sympa.
-• **Profils & stats** : crée ton profil, consulte tes statistiques, et bien plus encore !
-• **Confessions secrètes** : partage tes pensées en toute discrétion.
-
-──────────────
-💡 **Pour commencer**
-• Tape `/help` pour découvrir toutes mes commandes.
-• Clique sur 📺 **Tuto** pour accéder à ma chaîne YouTube.
-• Un souci ? Cliquez sur 🎫 **Support** et je vous aiderai.
-• Envie de me soutenir ? Cliquez sur 🗳️ **Vote** !
-
-Merci et amusez-vous bien ! 🌟
+(le bot crée automatiquement un fils appellé participations.)
 
 
-parfait maintenant change mon code pour rajouté ce text ainsi que les bouton  📺 **Tuto**,  🎫 **Support** ET  🗳️ **Vote**  
-VA CHERCHER DANS PARAMS COMME TU FAIT POUR LEMBED ET TOUT SES INFO LA #complété
+quand tu appuie sur participé , on te demande en modale 2 chooix pas obligatoire , mais on n'accepte pas un modal vide** on te demande choix 1. url de l'image , choix 2 , description (mwx lengt discord rate limit) tu peux remplir les 2.
 
-#complété
+une fois que sa ses fait , le bot l'envoie dans le fils qu'il a créer et rajoute le bouton vote
 
-# === Lien top.gg
-TOPGG = "https://top.gg/bot/1351415146639134832?s=08ff278d98260"
-SUPPORT_INVITE = "https://discord.gg/b6PbxtUWNk"
-TUTO_YTB = "https://youtube.com/@eldabot?si=3qciRBpP9A5Wx-6E"
-BOT_INVITE = ""
+les vote sont comptabilisé.
+on garde dans mongo.db que ce qui est active ce qui est terminé on supprime.
 
-# === Apparence des embeds ===
-EMBED_COLOR = 0xE3BAE8
-EMBED_FOOTER_TEXT = "©𝐸𝓁𝒹𝒶 𝐵𝑜𝓉"
-EMBED_FOOTER_ICON_URL = "https://cdn.discordapp.com/attachments/1102406059722801184/1387882570263433236/IMG_8167.png"
-EMBED_IMAGE_URL = "https://cdn.discordapp.com/attachments/1102406059722801184/1387886546300043264/0C5431CA-4920-413C-BBC7-0F18DA8C3D15.png"
-
-
+on peux concerver la commande /challenge list elle afficherais la liste des challenge du server avec leur salon
