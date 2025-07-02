@@ -1,31 +1,27 @@
-okay maintenant je veux créer le systeme afk
-2 commmande slash 
-afk set et afk list
+okay maintenant tu peux me faire 2 commande ? 
 
-usage > /afk set [raison] : ici la raison(pas obligatoire)
-message du bot > en embed en fonctions de params. 
-@nom du membre est maintenant afk!
-raison : la raison ici / si aucune raison on ecrit : Aucune raison mentionné 
-
-reaction du bot > change le pseudo de la personne pour ⚠️[AFK] Nom du membre ici.
+/bot info 
+envoie un embed en reprenant les config.params pour embed
 
 
-on enregistre en db , la raison & le changement du nom ainsi que le pseudo initiale.
-si la personne parle dans un salon on ecrit dans un embed ,
- @nom du membre n'est plus afk! 
- tu a été afk pendant (nombre de temp w/d/h/m) exemple 5 jour, exemple , 3 heure et 34 minutes.
+dedans il y a ses info la
+GENERAL 
+Bot name
+bot id
+Bot developper : xxmissr
+Commands : le nb de commande total du bot
+servers: le nombre de server le bot est dedans
+Membres : le nombre de membre total 
+crée : la date de création du bot
 
+SYSTEME
+uptime : le nombre de temp depuis qu'il est en ligne
+Python version :
 
- si quelqu'un de afk est mentionné on supprime le message ou il y a la mention , et on ecrit en embed
- @nom du membre mentionné esy présentement AFK , 
- raison : la raison ici ou aucune raison mentionné.
+a la fin inclus un bouton qui prend cette info de paramns: BOT_INVITE 
 
+/bot feedback
+usage /bot feedback [feedback] : le text ici.
+une fois envoyer , message du bot ephemere qui dit : feedback envoyé au developper!
 
- afk liste affiche un embed avec page & bouton
- l'interieur ressemblerais a sa:
- Membre qui sont afk - server (nom du server)
- @mention dun membre afk - raison : ""
-
- ou encore
- Membre qui sont afk - server (nom du server)
-Aucun membre n'est afk.
+le bot envoie le feedback en mp au BOT_OWNER_ID (dans paramns)

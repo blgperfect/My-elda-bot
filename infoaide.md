@@ -272,3 +272,6 @@ suite =>
 
 /custom-voc
 Permet de configuré les salon custom vocaux & modifiable pour les membres.
+
+/afk list - afk set
+permet de vous mettre afk & de changer votre pseudo!

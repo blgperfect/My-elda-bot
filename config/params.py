@@ -4,7 +4,7 @@
 TOPGG = "https://top.gg/bot/1351415146639134832?s=08ff278d98260"
 SUPPORT_INVITE = "https://discord.gg/b6PbxtUWNk"
 TUTO_YTB = "https://youtube.com/@eldabot?si=3qciRBpP9A5Wx-6E"
-BOT_INVITE = ""
+BOT_INVITE = "https://discord.com/oauth2/authorize?client_id=1387873062841745479"
 
 # === Apparence des embeds ===
 EMBED_COLOR = 0xE3BAE8
