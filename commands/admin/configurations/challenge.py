@@ -13,14 +13,10 @@ from config.params import (
     MESSAGES
 )
 
-# Emojis
 EMOJIS = {"participate": "✅", "finish": "⏱️"}
 
 
 def is_valid_image_url(url: str) -> bool:
-    """
-    Vérifie que l’URL est HTTP(s) et se termine par une extension d’image valide.
-    """
     try:
         p = urlparse(url)
     except Exception:
@@ -31,16 +27,12 @@ def is_valid_image_url(url: str) -> bool:
 
 
 class SubmissionModal(discord.ui.Modal, title="Soumettre une participation"):
-    url = discord.ui.TextInput(
-        label="URL de l'image",
-        style=discord.TextStyle.short,
-        required=False
-    )
+    url = discord.ui.TextInput(label="URL de l'image", style=discord.TextStyle.short, required=False)
     description = discord.ui.TextInput(
         label="Description (optionnel)",
         style=discord.TextStyle.paragraph,
         required=False,
-        max_length=1000  # limite à 1000 caractères
+        max_length=1000
     )
 
     def __init__(self, challenge_id: ObjectId, thread: discord.Thread):
@@ -61,34 +53,19 @@ class SubmissionModal(discord.ui.Modal, title="Soumettre une participation"):
             "description": self.description.value,
             "votes": []
         }
-
         await challenges_collection.update_one(
             {"_id": self.challenge_id},
             {"$push": {"submissions": sub}}
         )
 
-        # Construction de l'embed
         embed_desc = f"Par <@{interaction.user.id}>"
         if sub["description"]:
             embed_desc += f"\n{sub['description']}"
 
-        embed = discord.Embed(
-            title="Nouvelle participation",
-            description=embed_desc,
-            color=EMBED_COLOR
-        )
+        embed = discord.Embed(title="Nouvelle participation", description=embed_desc, color=EMBED_COLOR)
+        if sub["url"] and is_valid_image_url(sub["url"]):
+            embed.set_image(url=sub["url"])
 
-        # Validation de l'URL avant set_image
-        if sub["url"]:
-            if is_valid_image_url(sub["url"]):
-                embed.set_image(url=sub["url"])
-            else:
-                await interaction.followup.send(
-                    "⚠️ L’URL fournie n’est pas une image valide. La participation sera publiée sans visuel.",
-                    ephemeral=True
-                )
-
-        # Bouton “Voter”
         view = discord.ui.View()
         view.add_item(discord.ui.Button(
             label="Voter",
@@ -96,16 +73,13 @@ class SubmissionModal(discord.ui.Modal, title="Soumettre une participation"):
             style=discord.ButtonStyle.secondary
         ))
 
-        # Envoi dans le thread, avec gestion d’erreur
         try:
             await self.thread.send(embed=embed, view=view)
         except discord.HTTPException:
-            await interaction.followup.send(
+            return await interaction.response.send_message(
                 "Une erreur est survenue lors de l’envoi de votre participation.", ephemeral=True
             )
-            return
 
-        # Confirmation à l’utilisateur
         await interaction.response.send_message(
             MESSAGES.get("submit_success", "Participation enregistrée !"),
             ephemeral=True
@@ -118,23 +92,31 @@ class ChallengeView(discord.ui.View):
         self.challenge_id = challenge_id
         self.thread = thread
 
-    @discord.ui.button(
-        label="Participer",
-        style=discord.ButtonStyle.primary,
-        custom_id="challenge_participate"
-    )
+    @discord.ui.button(label="Participer", style=discord.ButtonStyle.primary, custom_id="challenge_participate")
     async def participate(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        # 1) empêcher participations multiples
+        exists = await challenges_collection.count_documents({
+            "_id": self.challenge_id,
+            "submissions.author_id": user_id
+        })
+        if exists:
+            return await interaction.response.send_message(
+                "Vous avez déjà soumis une participation à ce challenge.", ephemeral=True
+            )
+        # 2) sinon ouvrir le modal
         await interaction.response.send_modal(SubmissionModal(self.challenge_id, self.thread))
 
-    @discord.ui.button(
-        label="Finir Maintenant",
-        style=discord.ButtonStyle.danger,
-        custom_id="challenge_finish"
-    )
+    @discord.ui.button(label="Finir Maintenant", style=discord.ButtonStyle.danger, custom_id="challenge_finish")
     async def finish(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.ban_members:
             return await interaction.response.send_message("Permission refusée.", ephemeral=True)
+        # finir le challenge
         await self._finish(interaction)
+        # désactiver chaque bouton de cette view
+        for item in self.children:
+            item.disabled = True
+        await interaction.message.edit(view=self)
         await interaction.response.defer()
 
     async def _finish(self, interaction: discord.Interaction):
@@ -165,10 +147,17 @@ class Challenge(commands.Cog):
             thread = discord.utils.get(channel.threads, id=chal["thread_id"])
             await self._finish_challenge(None, chal["_id"], thread)
 
+            # désactiver les boutons du message initial
+            original = await thread.parent.fetch_message(chal["message_id"])
+            if original.components:
+                view = original.view or discord.ui.View.from_message(original)
+                for item in view.children:
+                    item.disabled = True
+                await original.edit(view=view)
+
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
-        data = interaction.data or {}
-        cid = data.get("custom_id", "")
+        cid = interaction.data.get("custom_id", "")
         if not cid.startswith("vote_"):
             return
 
@@ -179,29 +168,29 @@ class Challenge(commands.Cog):
             "submissions.submission_id": submission_id
         })
         if not chal:
-            return await interaction.response.send_message(
-                "Participation introuvable.", ephemeral=True
-            )
+            return await interaction.response.send_message("Participation introuvable.", ephemeral=True)
 
         sub = next(s for s in chal["submissions"] if s["submission_id"] == submission_id)
 
+        # auto-vote
         if sub["author_id"] == user_id:
             return await interaction.response.send_message(
                 "Vous ne pouvez pas voter pour votre propre participation.", ephemeral=True
             )
+        # vote multiple
         if user_id in sub["votes"]:
             return await interaction.response.send_message(
                 "Vous avez déjà voté pour cette participation.", ephemeral=True
             )
 
+        # enregistrer le vote
         await challenges_collection.update_one(
             {"_id": chal["_id"], "submissions.submission_id": submission_id},
             {"$push": {"submissions.$.votes": user_id}}
         )
 
-        # Mise à jour de l’embed
-        channel = interaction.channel
-        msg = await channel.fetch_message(interaction.message.id)
+        # mettre à jour l’embed
+        msg = await interaction.channel.fetch_message(interaction.message.id)
         embed = msg.embeds[0]
         lines = [l for l in embed.description.split("\n") if not l.startswith("Votes")]
         votes_count = len(sub["votes"]) + 1
@@ -209,9 +198,7 @@ class Challenge(commands.Cog):
         embed.description = "\n".join(lines)
         await msg.edit(embed=embed)
 
-        await interaction.response.send_message(
-            "Votre vote a bien été pris en compte !", ephemeral=True
-        )
+        await interaction.response.send_message("Votre vote a bien été pris en compte !", ephemeral=True)
 
     async def _finish_challenge(
         self,
@@ -223,11 +210,11 @@ class Challenge(commands.Cog):
         subs = chal.get("submissions", [])
         ranked = sorted(subs, key=lambda s: len(s["votes"]), reverse=True)[:3]
         medals = ["🥇", "🥈", "🥉"]
-        desc_lines = [
+        desc = "\n".join(
             f"{medals[i]} <@{r['author_id']}> — {len(r['votes'])} votes"
             for i, r in enumerate(ranked)
-        ]
-        desc = "\n".join(desc_lines) or "Aucune participation."
+        ) or "Aucune participation."
+
         original = await thread.parent.fetch_message(chal["message_id"])
         await original.edit(
             embed=discord.Embed(
@@ -240,10 +227,7 @@ class Challenge(commands.Cog):
         await challenges_collection.delete_one({"_id": challenge_id})
 
     @app_commands.guild_only()
-    @app_commands.command(
-        name="challenge_create",
-        description="Créer un challenge"
-    )
+    @app_commands.command(name="challenge_create", description="Créer un challenge")
     @app_commands.describe(
         channel="Salon pour le challenge",
         nom="Nom du challenge",
@@ -288,14 +272,12 @@ class Challenge(commands.Cog):
                 "message_id": msg.id
             }}
         )
+
         await msg.edit(view=ChallengeView(chal_id, thread))
         await interaction.response.send_message("Challenge créé !", ephemeral=True)
 
     @app_commands.guild_only()
-    @app_commands.command(
-        name="challenge_list",
-        description="Lister les challenges actifs"
-    )
+    @app_commands.command(name="challenge_list", description="Lister les challenges actifs")
     async def list(self, interaction: discord.Interaction):
         docs = await challenges_collection.find().to_list(50)
         embed = discord.Embed(title="Challenges actifs", color=EMBED_COLOR)
