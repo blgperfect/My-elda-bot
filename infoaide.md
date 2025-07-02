@@ -281,4 +281,3 @@ obtiens les informations du bot
 /bot feedback 
 envoie ton avis, ton probleme etc!
 
-/ghost
