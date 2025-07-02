@@ -76,22 +76,37 @@ class BotInfoCog(commands.Cog):
     @group.command(name="feedback", description="Envoyer un feedback au développeur 💬")
     @app_commands.describe(message="Votre message de feedback")
     async def feedback(self, interaction: discord.Interaction, message: str):
-        # Envoi en DM au propriétaire
-        owner = await self.bot.fetch_user(BOT_OWNER_ID)
-        dm = Embed(
-            title="💬 Nouveau Feedback",
-            color=EMBED_COLOR,
-            timestamp=datetime.utcnow()
+        # Construction de l'embed de feedback
+        dm = Embed(title="💬 Nouveau Feedback", color=EMBED_COLOR)
+        dm.add_field(
+            name="👤 De",
+            value=f"{interaction.user} ({interaction.user.id})",
+            inline=False
         )
-        dm.add_field(name="👤 De",      value=f"{interaction.user} ({interaction.user.id})", inline=False)
-        dm.add_field(name="✉️ Message", value=message,                                 inline=False)
+        # Info serveur si disponible
+        if interaction.guild:
+            dm.add_field(
+                name="🌐 Serveur",
+                value=f"{interaction.guild.name} ({interaction.guild.id})",
+                inline=False
+            )
+        dm.add_field(name="✉️ Message", value=message, inline=False)
+        # Date locale
+        local_date = interaction.created_at.astimezone()
+        dm.add_field(
+            name="📅 Date",
+            value=local_date.strftime("%Y-%m-%d %H:%M:%S"),
+            inline=False
+        )
         dm.set_footer(text="Feedback reçu", icon_url=EMBED_FOOTER_ICON_URL)
 
+        # Envoi en DM au propriétaire
         try:
+            owner = await self.bot.fetch_user(BOT_OWNER_ID)
             await owner.send(embed=dm)
         except discord.Forbidden:
-            # Le propriétaire a désactivé les MP
-            ...
+            # Si MP impossible, on ignore
+            pass
 
         # Confirmation éphémère
         await interaction.response.send_message(
