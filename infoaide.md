@@ -266,3 +266,9 @@ Voici la version corrigée, structurée et enrichie d’emojis :
 ---
 
 *Toutes les explications ont été revues pour garantir clarté et cohérence !* 😎
+
+
+suite =>
+
+/custom-voc
+Permet de configuré les salon custom vocaux & modifiable pour les membres.
