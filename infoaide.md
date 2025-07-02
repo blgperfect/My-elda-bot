@@ -280,4 +280,5 @@ permet de vous mettre afk & de changer votre pseudo!
 obtiens les informations du bot
 /bot feedback 
 envoie ton avis, ton probleme etc!
-
+/clear 
+te permet de supprimé des message 
