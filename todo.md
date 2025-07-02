@@ -1,28 +1,31 @@
-Bon donc J'aimerais une commande qui sappelle : /custom-voc
-permisson : administrateur /caché la commande a ceux qui non pas cette permission
-menu embed [regarder params pour les infos a prendre : on utulise exemple : from config.params import (
-    EMBED_COLOR,
-    EMBED_FOOTER_TEXT,
-    EMBED_FOOTER_ICON_URL,
-    MESSAGES,
-)]
+okay maintenant je veux créer le systeme afk
+2 commmande slash 
+afk set et afk list
 
-limitation du code : une seule configuration possible , si le membre fait /custom-voc et qu'il a deja une config on desactive le bouton creer on lui laisse seulement supprimé
-et on ne peux pas supprimé ce qui nexiste pas encore !
-L'embed aurais un menu de selection rattacher a lui pour configurer (faut allez en ordre) : 1. La catégorie pour le salon vocale. 2. Le salon vocale pour créer les salon vocaux custom.(avec explications pour clareté) embed qui se change dynamiquement selon les choix. 
-+ 2 bouton , terminé = confirmé les choix + enregistrer dans la db (on enregistre la categorie id et salon id (si jamais il decide de changer les noms) la categorie est l'endroit ou seront créer les futur salon vocaux custom et le salon ou les membre doivent rejoindre pour créer le leurs.)
-bouton suppression = supprimer les configs , ON NE SUPPRIME PAS LES SALON. on supprime uniquement la db donc plus rien se passe si quelqu'un rejoint un salon qui avais ete configurer
+usage > /afk set [raison] : ici la raison(pas obligatoire)
+message du bot > en embed en fonctions de params. 
+@nom du membre est maintenant afk!
+raison : la raison ici / si aucune raison on ecrit : Aucune raison mentionné 
+
+reaction du bot > change le pseudo de la personne pour ⚠️[AFK] Nom du membre ici.
 
 
-que ce paase t-il ensuite ? 
-eh bien quand un membre rejoint le salon vocale definit on créer un nouveau salon et on le renomme : salon de [nom du membre]
-on envoie un menu avec choix (bouton ou selection non expirable) pour configuré sont salon (ce menu est strictement et uniquement pour lapersonne a qui appartien ce salon)
-choix du menu : changer la limitation (nb d emembre dans le salon voc) renommer le salon , mettre un status au salon vocaux, 
-si la personne quitte le salon , on ne supprime pas sont salon personnelle si il y a encore des gens
-on supprime uniquement le salon quand la derniere personne a y etre quitte
+on enregistre en db , la raison & le changement du nom ainsi que le pseudo initiale.
+si la personne parle dans un salon on ecrit dans un embed ,
+ @nom du membre n'est plus afk! 
+ tu a été afk pendant (nombre de temp w/d/h/m) exemple 5 jour, exemple , 3 heure et 34 minutes.
 
-le membre ne peux pas gerer les changement (limitation membre et le reste autrement que par le bot et son menu. Nous utulisons automatiquement les permissions & role configurer de la categorie parents)
-c'est clair ? 
 
-je veux un menu sophistiquer claire et beau!
+ si quelqu'un de afk est mentionné on supprime le message ou il y a la mention , et on ecrit en embed
+ @nom du membre mentionné esy présentement AFK , 
+ raison : la raison ici ou aucune raison mentionné.
 
+
+ afk liste affiche un embed avec page & bouton
+ l'interieur ressemblerais a sa:
+ Membre qui sont afk - server (nom du server)
+ @mention dun membre afk - raison : ""
+
+ ou encore
+ Membre qui sont afk - server (nom du server)
+Aucun membre n'est afk.
