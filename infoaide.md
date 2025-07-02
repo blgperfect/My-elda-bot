@@ -275,3 +275,10 @@ Permet de configuré les salon custom vocaux & modifiable pour les membres.
 
 /afk list - afk set
 permet de vous mettre afk & de changer votre pseudo!
+
+/bot info 
+obtiens les informations du bot
+/bot feedback 
+envoie ton avis, ton probleme etc!
+
+/ghost
