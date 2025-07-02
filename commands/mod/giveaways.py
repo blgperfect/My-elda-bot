@@ -188,14 +188,16 @@ class GiveawayView(View):
         self.add_item(draw_btn)
 
     def make_reroll_only(self) -> View:
-        view = View(timeout=None)
-        btn = Button(label="Reroll", style=discord.ButtonStyle.secondary, custom_id="giveaway_reroll")
-        btn.callback = self.reroll
-        view.add_item(btn)
+        # On reprend GiveawayView pour conserver interaction_check
+        view = GiveawayView(self.data, self.end_time)
+        # Désactive tous les boutons sauf le reroll
+        for item in view.children:
+            item.disabled = (item.custom_id != "giveaway_reroll")
         return view
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         cid = interaction.data.get("custom_id", "")
+        # Pour cancel, reroll et draw, il faut la permission ban_members
         if cid in ("giveaway_cancel", "giveaway_reroll", "giveaway_draw") and not interaction.user.guild_permissions.ban_members:
             await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
             return False
@@ -232,8 +234,23 @@ class GiveawayView(View):
         parts = self.data.get("participants", [])
         if not parts:
             return await interaction.response.send_message("⚠️ Aucun participant.", ephemeral=True)
+        # Tirage
         winner = random.choice(parts)
         await interaction.response.send_message(f"🎉 <@{winner}>, tu as gagné !", ephemeral=False)
+        # Enregistrer le reroll
+        await giveaways_collection.update_one(
+            {"_id": self.data["_id"]},
+            {"$set": {
+                "last_reroll": datetime.now(timezone.utc),
+                "reroll_winner": winner
+            }}
+        )
+        # Désactiver le bouton pour éviter le spam
+        view = self.make_reroll_only()
+        for btn in view.children:
+            if btn.custom_id == "giveaway_reroll":
+                btn.disabled = True
+        await interaction.message.edit(view=view)
 
     async def draw_now(self, interaction: discord.Interaction):
         parts = self.data.get("participants", [])
@@ -278,6 +295,7 @@ class GiveawayCog(commands.Cog):
     @app_commands.guild_only()
     async def giveaway(self, interaction: discord.Interaction):
         await interaction.response.send_modal(GiveawayModal())
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(GiveawayCog(bot))
