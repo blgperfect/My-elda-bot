@@ -5,6 +5,7 @@ from discord.ext import commands, tasks
 from discord import app_commands
 from io import BytesIO
 import jinja2
+import os
 from playwright.async_api import async_playwright
 from pymongo import ReturnDocument
 
