@@ -5,27 +5,19 @@ from discord.ext import commands, tasks
 from discord import app_commands
 from io import BytesIO
 import jinja2
-import os
 from playwright.async_api import async_playwright
 from pymongo import ReturnDocument
 
 from config.mongo import profile_collection
 
 # --- Setup Jinja2 for HTML template ---
-
-base_dir = os.path.dirname(os.path.abspath(__file__))
-
-tpl_dir = os.path.abspath(os.path.join(base_dir, "..", "..", "..", "templates"))
-
-# 3. Initialise Jinja avec ce chemin absolu
 template_env = jinja2.Environment(
-    loader=jinja2.FileSystemLoader(tpl_dir),
+    loader=jinja2.FileSystemLoader("templates"),
     autoescape=jinja2.select_autoescape(["html"]),
     trim_blocks=True,
     lstrip_blocks=True
 )
 template = template_env.get_template("profile_template.html")
-
 
 
 async def render_profile_to_image(data: dict) -> BytesIO:
@@ -41,21 +33,11 @@ async def render_profile_to_image(data: dict) -> BytesIO:
     )
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-gpu",
-                "--disable-dev-shm-usage",
-            ]
-        )
-
+        browser = await pw.chromium.launch()
         page = await browser.new_page(viewport={"width": 600, "height": 350})
         await page.set_content(html, wait_until="networkidle")
 
-        # 👉 on attend un tout petit peu pour être sûr que tout le CSS et l'image de fond sont rendus
-        await page.wait_for_timeout(500)
-
+        # On capture la page entière (la zone 600×350) y compris le background CSS
         png = await page.screenshot(
             omit_background=False,
             clip={"x": 0, "y": 0, "width": 600, "height": 350}
