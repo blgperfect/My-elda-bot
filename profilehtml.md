@@ -21,7 +21,7 @@
     body {
       /* Fond (toujours flouté si vous souhaitez garder ce style) */
       position: relative;
-      background: url('https://cdn.discordapp.com/attachments/1102406059722801184/1389586859985735710/DALLE_2025-07-01_08.41.32_-_A_dark_pastel_background_with_a_gradient_of_deep_pink_muted_lavender_and_navy_blue._The_design_should_be_soft_and_dreamy_with_a_slightly_blurred_ef.webp?ex=6865291c&is=6863d79c&hm=f82050e9163a2b7bc3f99e732873e7429113bf1e0084b1a5075c496f589f8cf7')
+      background: url('https://cdn.discordapp.com/attachments/1102406059722801184/1389586859985735710/DALLE_2025-07-01_08.41.32_-_A_dark_pastel_background_with_a_gradient_of_deep_pink_muted_lavender_and_navy_blue._The_design_should_be_soft_and_dreamy_with_a_slightly_blurred_ef.webp?ex=6865291c&is=6863d79c&hm=f82050e9163a2b7bc3f99e732873e7429113bf1e0084b1a5075c496f589f8cf7&')
         no-repeat center center fixed;
       background-size: cover;
 
