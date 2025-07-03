@@ -1,6 +1,6 @@
 import asyncio
 import discord
-import os
+import os                          # ← import ajouté
 from discord import File, Embed
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -34,16 +34,17 @@ async def render_profile_to_image(data: dict) -> BytesIO:
         description=data.get("description") or "aucune"
     )
 
-    # 2) Injection d'une balise <base> pointant sur votre dossier templates/
-    #    pour que tous les chemins relatifs (../assets/eldabot.jpeg) soient résolus.
+    # 2) Injection d'une balise <base> pour résoudre les chemins relatifs
     template_dir = os.path.join(os.getcwd(), "templates")
     base_tag     = f'<base href="file://{template_dir}/">'
     html = html.replace("<head>", f"<head>{base_tag}", 1)
 
-    # 3) Rendu avec Playwright, sans paramètre `url`
+    # 3) Rendu avec Playwright
     async with async_playwright() as pw:
         browser = await pw.chromium.launch()
         page = await browser.new_page(viewport={"width": 600, "height": 350})
+
+        # plus de paramètre url=…, le <base> gère la résolution
         await page.set_content(html, wait_until="networkidle")
 
         png = await page.screenshot(
