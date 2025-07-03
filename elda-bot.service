@@ -1,0 +1,14 @@
+[Unit]
+Description=Elda Discord Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/elda-bot
+ExecStart=/root/elda-bot/venv/bin/python /root/elda-bot/elda.py
+Restart=on-failure
+EnvironmentFile=/root/elda-bot/.env
+
+[Install]
+WantedBy=multi-user.target

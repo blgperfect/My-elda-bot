@@ -33,11 +33,21 @@ async def render_profile_to_image(data: dict) -> BytesIO:
     )
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch()
+        browser = await pw.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+            ]
+        )
+
         page = await browser.new_page(viewport={"width": 600, "height": 350})
         await page.set_content(html, wait_until="networkidle")
 
-        # On capture la page entière (la zone 600×350) y compris le background CSS
+        # 👉 on attend un tout petit peu pour être sûr que tout le CSS et l'image de fond sont rendus
+        await page.wait_for_timeout(500)
+
         png = await page.screenshot(
             omit_background=False,
             clip={"x": 0, "y": 0, "width": 600, "height": 350}
@@ -48,6 +58,7 @@ async def render_profile_to_image(data: dict) -> BytesIO:
     buf = BytesIO(png)
     buf.seek(0)
     return buf
+
 
 
 
