@@ -11,8 +11,11 @@ from pymongo import ReturnDocument
 from config.mongo import profile_collection
 
 # --- Setup Jinja2 for HTML template ---
+base_dir = os.path.dirname(os.path.abspath(__file__))
+tpl_dir  = os.path.join(base_dir, "templates")
+
 template_env = jinja2.Environment(
-    loader=jinja2.FileSystemLoader("templates"),
+    loader=jinja2.FileSystemLoader(tpl_dir),
     autoescape=jinja2.select_autoescape(["html"]),
     trim_blocks=True,
     lstrip_blocks=True
