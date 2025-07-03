@@ -1,5 +1,6 @@
 import asyncio
 import discord
+import os
 from discord import File, Embed
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -32,12 +33,20 @@ async def render_profile_to_image(data: dict) -> BytesIO:
         description=data.get("description") or "aucune"
     )
 
+    # ← Ajoutez ceci
+    template_path = os.path.join(os.getcwd(), "templates", "profile_template.html")
+
     async with async_playwright() as pw:
         browser = await pw.chromium.launch()
         page = await browser.new_page(viewport={"width": 600, "height": 350})
-        await page.set_content(html, wait_until="networkidle")
 
-        # On capture la page entière (la zone 600×350) y compris le background CSS
+        # ← Modifiez cet appel :
+        await page.set_content(
+            html,
+            wait_until="networkidle",
+            url=f"file://{template_path}"      # ← on donne la base file://
+        )
+
         png = await page.screenshot(
             omit_background=False,
             clip={"x": 0, "y": 0, "width": 600, "height": 350}
@@ -48,6 +57,7 @@ async def render_profile_to_image(data: dict) -> BytesIO:
     buf = BytesIO(png)
     buf.seek(0)
     return buf
+
 
 
 
