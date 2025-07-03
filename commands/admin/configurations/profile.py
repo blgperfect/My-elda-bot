@@ -12,9 +12,12 @@ from pymongo import ReturnDocument
 from config.mongo import profile_collection
 
 # --- Setup Jinja2 for HTML template ---
-base_dir = os.path.dirname(os.path.abspath(__file__))
-tpl_dir  = os.path.join(base_dir, "templates")
 
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
+tpl_dir = os.path.abspath(os.path.join(base_dir, "..", "..", "..", "templates"))
+
+# 3. Initialise Jinja avec ce chemin absolu
 template_env = jinja2.Environment(
     loader=jinja2.FileSystemLoader(tpl_dir),
     autoescape=jinja2.select_autoescape(["html"]),
@@ -22,6 +25,7 @@ template_env = jinja2.Environment(
     lstrip_blocks=True
 )
 template = template_env.get_template("profile_template.html")
+
 
 
 async def render_profile_to_image(data: dict) -> BytesIO:
