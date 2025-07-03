@@ -1,6 +1,7 @@
 import asyncio
 import discord
-import os                          # ← import ajouté
+import os
+import base64                             # ← pour l’encodage Base64
 from discord import File, Embed
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -22,8 +23,13 @@ template = template_env.get_template("profile_template.html")
 
 
 async def render_profile_to_image(data: dict) -> BytesIO:
-    """Rendu du template HTML en PNG, avec le background visible."""
-    # 1) Génération du HTML depuis Jinja
+    """Rendu du template HTML en PNG, avec le background encodé en Base64."""
+    # 1) Encoder eldabot.jpeg en Base64
+    img_path = os.path.join(os.getcwd(), "assets", "eldabot.jpeg")
+    with open(img_path, "rb") as imgf:
+        background_b64 = base64.b64encode(imgf.read()).decode("utf-8")
+
+    # 2) Génération du HTML depuis Jinja, en passant la chaîne Base64
     html = template.render(
         avatar_url=data.get("avatar_url", ""),
         nickname=data.get("nickname") or "inconnu",
@@ -31,20 +37,14 @@ async def render_profile_to_image(data: dict) -> BytesIO:
         gender=data.get("gender") or "inconnu",
         pronoun=data.get("pronoun") or "inconnu",
         birthday=data.get("birthday") or "inconnu",
-        description=data.get("description") or "aucune"
+        description=data.get("description") or "aucune",
+        background_base64=background_b64
     )
 
-    # 2) Injection d'une balise <base> pour résoudre les chemins relatifs
-    template_dir = os.path.join(os.getcwd(), "templates")
-    base_tag     = f'<base href="file://{template_dir}/">'
-    html = html.replace("<head>", f"<head>{base_tag}", 1)
-
-    # 3) Rendu avec Playwright
+    # 3) Rendu avec Playwright (pas de <base> ni url=… nécessaire)
     async with async_playwright() as pw:
         browser = await pw.chromium.launch()
         page = await browser.new_page(viewport={"width": 600, "height": 350})
-
-        # plus de paramètre url=…, le <base> gère la résolution
         await page.set_content(html, wait_until="networkidle")
 
         png = await page.screenshot(
@@ -56,6 +56,7 @@ async def render_profile_to_image(data: dict) -> BytesIO:
     buf = BytesIO(png)
     buf.seek(0)
     return buf
+
 
 
 

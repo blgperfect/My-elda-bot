@@ -19,9 +19,9 @@
     }
 
     body {
-      /* Fond (toujours flouté si vous souhaitez garder ce style) */
+      /* Fond encodé en Base64 pour une résolution 100% fiable */
       position: relative;
-      background: url('../assets/eldabot.jpeg')
+      background: url('data:image/jpeg;base64,{{ background_base64 }}')
         no-repeat center center fixed;
       background-size: cover;
 
