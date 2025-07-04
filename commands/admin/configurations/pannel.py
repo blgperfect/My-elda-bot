@@ -27,12 +27,10 @@ class EmbedModal(Modal, title="Configuration Embed"):
         self.parent_view = parent_view
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        # Save embed data and refresh panel
         self.parent_view.embed_data['title'] = self.title_input.value.strip()
         self.parent_view.embed_data['description'] = self.desc_input.value.strip()
         self.parent_view.embed_data['image'] = self.img_input.value.strip()
         self.parent_view.embed_data['footer'] = self.foot_input.value.strip()
-        # Edit the existing panel message
         embed = self.parent_view.build_panel_embed()
         await interaction.response.edit_message(embed=embed, view=self.parent_view)
 
@@ -72,7 +70,7 @@ class ConfigView(View):
             f"**Titre Embed:** `{self.embed_data.get('title', '❌')}`\n"
             f"**Description Embed:** `{self.embed_data.get('description', '❌')}`\n"
             f"**Image Embed:** `{self.embed_data.get('image', '❌')}`\n"
-            f"**Footer Embed:** `{self.embed_data.get('footer', '❌')}`\n"
+            f"**Footer Embed:** {self.embed_data.get('footer', '❌')}\n"
             f"**Catégories:** {len(self.temp_categories)}/5\n"
             f"**Salon Logs:** {f'<#{self.log_channel}>' if self.log_channel else '❌'}\n"
             f"**Catégorie Discord:** {f'<#{self.ticket_category}>' if self.ticket_category else '❌'}"
@@ -87,7 +85,6 @@ class ConfigView(View):
 
     async def show_panel(self, interaction: discord.Interaction) -> None:
         embed = self.build_panel_embed()
-        # First interaction: send initial message; subsequent: edit same message
         if not self.message:
             await interaction.response.send_message(embed=embed, view=self)
             self.message = await interaction.original_response()
@@ -98,15 +95,13 @@ class ConfigView(View):
     async def _set_embed(self, interaction: discord.Interaction, button: Button) -> None:
         if interaction.user.id != self.author.id:
             return await interaction.response.send_message(MESSAGES['PERMISSION_ERROR'], ephemeral=True)
-        modal = EmbedModal(self)
-        await interaction.response.send_modal(modal)
+        await interaction.response.send_modal(EmbedModal(self))
 
     @discord.ui.button(label="Ajouter Catégorie", style=discord.ButtonStyle.primary, custom_id="add_category")
     async def _add_category(self, interaction: discord.Interaction, button: Button) -> None:
         if interaction.user.id != self.author.id:
             return await interaction.response.send_message(MESSAGES['PERMISSION_ERROR'], ephemeral=True)
-        modal = CategoryModal(self)
-        await interaction.response.send_modal(modal)
+        await interaction.response.send_modal(CategoryModal(self))
 
     @discord.ui.button(label="Salon Logs", style=discord.ButtonStyle.primary, custom_id="set_logs")
     async def _set_logs(self, interaction: discord.Interaction, button: Button) -> None:
@@ -148,11 +143,7 @@ class ConfigView(View):
             'ticket_category': str(self.ticket_category),
             'ticket_count': 0
         }
-        await ticket_collection.update_one(
-            {'guild_id': str(self.guild_id)},
-            {'$set': data},
-            upsert=True
-        )
+        await ticket_collection.update_one({'guild_id': str(self.guild_id)}, {'$set': data}, upsert=True)
         await interaction.response.edit_message(content="Configuration enregistrée !", embed=None, view=None)
 
 class TicketPanelView(View):
@@ -166,39 +157,23 @@ class TicketPanelView(View):
 
     async def on_select(self, interaction: discord.Interaction) -> None:
         if not self.cfg.get('ticket_category'):
-            return await interaction.response.send_message(
-                embed=discord.Embed(description="Erreur : la catégorie Discord n'est pas configurée.", color=EMBED_COLOR),
-                ephemeral=True
-            )
+            return await interaction.response.send_message(embed=discord.Embed(description="Erreur : la catégorie Discord n'est pas configurée.", color=EMBED_COLOR), ephemeral=True)
         user_id = interaction.user.id
         guild_id = str(interaction.guild_id)
         existing = discord.utils.get(interaction.guild.text_channels, topic=f"ticket:{guild_id}:{user_id}")
         if existing:
-            return await interaction.response.send_message(
-                embed=discord.Embed(description=MESSAGES['TICKET_EXISTS'], color=EMBED_COLOR),
-                ephemeral=True
-            )
-        result = await ticket_collection.find_one_and_update(
-            {'guild_id': guild_id}, {'$inc': {'ticket_count': 1}}, return_document=True
-        )
+            return await interaction.response.send_message(embed=discord.Embed(description=MESSAGES['TICKET_EXISTS'], color=EMBED_COLOR), ephemeral=True)
+        result = await ticket_collection.find_one_and_update({'guild_id': guild_id}, {'$inc': {'ticket_count': 1}}, return_document=True)
         count = result['ticket_count']
         channel_name = f"{count}-{interaction.user.name}"
-        channel = await interaction.guild.create_text_channel(
-            name=channel_name,
-            category=interaction.guild.get_channel(int(self.cfg['ticket_category'])),
-            topic=f"ticket:{guild_id}:{user_id}"
-        )
+        channel = await interaction.guild.create_text_channel(name=channel_name, category=interaction.guild.get_channel(int(self.cfg['ticket_category'])), topic=f"ticket:{guild_id}:{user_id}")
         await channel.set_permissions(interaction.guild.default_role, view_channel=False)
         await channel.set_permissions(interaction.user, view_channel=True, send_messages=True)
         for role_id in self.cfg['categories'][interaction.data['values'][0]]['roles']:
             role = interaction.guild.get_role(int(role_id))
             if role:
                 await channel.set_permissions(role, view_channel=True, send_messages=True)
-        embed = discord.Embed(
-            title=self.cfg['panel_embed']['title'],
-            description=self.cfg['categories'][interaction.data['values'][0]]['description'],
-            color=EMBED_COLOR
-        )
+        embed = discord.Embed(title=self.cfg['panel_embed']['title'], description=self.cfg['categories'][interaction.data['values'][0]]['description'], color=EMBED_COLOR)
         btn_view = View()
         btn_view.add_item(Button(label="📥 Claim", custom_id="claim", style=discord.ButtonStyle.secondary))
         btn_view.add_item(Button(label="🔒 Close", custom_id="close", style=discord.ButtonStyle.danger))
@@ -208,17 +183,9 @@ class TicketPanelView(View):
         await msg.pin()
         log_ch = interaction.guild.get_channel(int(self.cfg['log_channel']))
         if log_ch:
-            await log_ch.send(
-                embed=discord.Embed(
-                    title="Ticket créé",
-                    description=f"Ticket #{count} créé par {interaction.user.mention}",
-                    color=EMBED_COLOR
-                )
-            )
-        await interaction.response.send_message(
-            embed=discord.Embed(description=MESSAGES['TICKET_CREATED'].format(channel=channel.mention), color=EMBED_COLOR),
-            ephemeral=True
-        )
+            await log_ch.send(embed=discord.Embed(title="Ticket créé", description=f"Ticket #{count} créé par {interaction.user.mention}", color=EMBED_COLOR))
+        text = MESSAGES.get('TICKET_CREATED', "Ticket créé : {channel}").format(channel=channel.mention)
+        await interaction.response.send_message(embed=discord.Embed(description=text, color=EMBED_COLOR), ephemeral=True)
 
 class Tickets(commands.Cog):
     ticket = app_commands.Group(name="ticket", description="Commandes de tickets")
@@ -235,15 +202,16 @@ class Tickets(commands.Cog):
         await view.show_panel(interaction)
 
     @ticket.command(name="panel", description="Affiche le panneau de création de ticket.")
-    async def panel(self,interaction: discord.Interaction) -> None:
+    @app_commands.describe(channel="Salon où envoyer le panneau")
+    async def panel(self, interaction: discord.Interaction, channel: discord.TextChannel=None) -> None:
         cfg = await ticket_collection.find_one({'guild_id': str(interaction.guild_id)})
         if not cfg:
-            return await interaction.response.send_message(
-                embed=discord.Embed(title=MESSAGES['MISSING_ARGUMENT'], description="Le panneau n'est pas configuré.", color=EMBED_COLOR), ephemeral=True
-            )
+            return await interaction.response.send_message(embed=discord.Embed(title=MESSAGES['MISSING_ARGUMENT'], description="Le panneau n'est pas configuré.", color=EMBED_COLOR), ephemeral=True)
         embed = discord.Embed(title=cfg['panel_embed']['title'], description=cfg['panel_embed']['description'], color=EMBED_COLOR)
         view = TicketPanelView(cfg)
-        await interaction.response.send_message(embed=embed, view=view)
+        dest = channel or interaction.channel
+        await dest.send(embed=embed, view=view)
+        await interaction.response.send_message(f"Panneau envoyé dans {dest.mention}", ephemeral=True)
 
     async def on_interaction(self, interaction: discord.Interaction) -> None:
         if interaction.type != discord.InteractionType.component:
