@@ -235,7 +235,7 @@ async def start_configuration(bot: commands.Bot, channel: discord.TextChannel, a
 
     if not categories:
         return await embed_msg.edit(
-            embed=discord.Embed(description="❌ Au moins une catégorie requise.", color=0xFF0000)
+            embed=discord.Embed(description="❌ Au moins une catégorie requise. Appuyé de nouveau sur Commencer.", color=0xFF0000)
         )
 
     # Enregistrement en base
@@ -263,8 +263,8 @@ async def start_configuration(bot: commands.Bot, channel: discord.TextChannel, a
 
     # Confirmation finale
     final = discord.Embed(
-        title=data["title"],
-        description=data["description"],
+        title="Et voila c'est configuré!",
+        description="Faite la commande **/panel_tickets** pour affiché votre pannel!",
         color=EMBED_COLOR
     )
     if data.get("footer"):

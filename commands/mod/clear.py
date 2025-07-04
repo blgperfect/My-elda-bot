@@ -1,4 +1,5 @@
 # commands/moderation/clear.py
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -33,7 +34,7 @@ class Clear(commands.Cog):
         # On defer pour rester dans les clous de Discord
         await interaction.response.defer(ephemeral=True)
 
-        # Validation
+        # Validation de l'argument
         if not 1 <= amount <= 100:
             embed = discord.Embed(
                 title=MESSAGES["INVALID_ARGUMENT"],
@@ -43,20 +44,27 @@ class Clear(commands.Cog):
             embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
             return await interaction.followup.send(embed=embed)
 
-        # Suppression
+        # Suppression des messages
         deleted = await interaction.channel.purge(limit=amount)
 
-        # Réponse finale via followup
+        # Construction de l'embed de confirmation
         embed = discord.Embed(
             title=f"{EMOJIS['SUCCESS']} Suppression effectuée",
             description=f"{len(deleted)} message(s) supprimé(s) avec succès.",
             color=EMBED_COLOR,
             timestamp=discord.utils.utcnow()
         )
-        embed.set_thumbnail(url=interaction.guild.icon.url)
+
+        # Ne pas planter si le serveur n’a pas d’icône
+        if interaction.guild.icon:
+            embed.set_thumbnail(url=interaction.guild.icon.url)
+        # Sinon, on peut laisser sans thumbnail ou utiliser une icône par défaut :
+        # embed.set_thumbnail(url=EMBED_FOOTER_ICON_URL)
+
         embed.add_field(name="Canal", value=interaction.channel.mention, inline=True)
         embed.add_field(name="Modérateur", value=interaction.user.mention, inline=True)
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
+
         await interaction.followup.send(embed=embed)
 
     @clear.error
@@ -86,9 +94,14 @@ class Clear(commands.Cog):
             color=EMBED_COLOR,
             timestamp=discord.utils.utcnow()
         )
-        embed.set_thumbnail(url=interaction.guild.icon.url)
+
+        # Même vérification pour le thumbnail en cas d’erreur
+        if interaction.guild.icon:
+            embed.set_thumbnail(url=interaction.guild.icon.url)
+
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
         await interaction.followup.send(embed=embed)
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Clear(bot))
