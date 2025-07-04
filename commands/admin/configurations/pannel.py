@@ -1,9 +1,11 @@
+# commands/admin/configurations/pannel.py
+
 import discord
 import io
+import asyncio
 from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Button, ChannelSelect, RoleSelect
-import asyncio
 from pymongo import ReturnDocument
 
 from config.params import (
@@ -21,17 +23,13 @@ MAX_CATEGORIES = 5
 def build_embed(data: dict, categories: list[dict], current_question: str = "") -> discord.Embed:
     """Construit l'embed dynamique affichant l'état de la config et la question en cours."""
     embed = discord.Embed(title="📋 Configuration des tickets", color=EMBED_COLOR)
-
-    # Question en cours
     if current_question:
         embed.add_field(name="❓ Question", value=current_question, inline=False)
 
-    # Champs configurés
     embed.add_field(name="🎫 Titre", value=data.get("title", "❌ Non défini"), inline=False)
     embed.add_field(name="📝 Description", value=data.get("description", "❌ Non défini"), inline=False)
     embed.add_field(name="🔖 Footer", value=data.get("footer", "❌ Non défini"), inline=False)
 
-    # Salon transcripts
     transcripts = data.get("transcript_channel")
     embed.add_field(
         name="📂 Salon transcripts",
@@ -39,13 +37,12 @@ def build_embed(data: dict, categories: list[dict], current_question: str = "") 
         inline=False
     )
 
-    # Catégories
     if categories:
         lines = []
         for c in categories:
             roles_mention = " ".join(f"<@&{r}>" for r in c["roles"])
             cat_mention = f"<#{c['discord_category']}>"
-            lines.append(f"**{c['name']}** — Rôles: {roles_mention} — Parent: {cat_mention}")
+            lines.append(f"**{c['name']}** — Rôles : {roles_mention} — Parent : {cat_mention}")
         embed.add_field(
             name=f"📚 Catégories ({len(categories)}/{MAX_CATEGORIES})",
             value="\n".join(lines),
@@ -58,7 +55,7 @@ def build_embed(data: dict, categories: list[dict], current_question: str = "") 
             inline=False
         )
 
-    embed.set_footer(text="Besoin d'aide ? Cliquez sur 📖", icon_url=EMBED_FOOTER_ICON_URL)
+    embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
     return embed
 
 
@@ -69,7 +66,7 @@ class HelpView(View):
 
     @discord.ui.button(label="📖 Aide", style=discord.ButtonStyle.secondary, custom_id="help_button")
     async def help(self, interaction: discord.Interaction, button: Button):
-        text = (
+        guide = (
             "**Guide Configuration Tickets**\n"
             f"• Répondez dans l'embed mis à jour.\n"
             f"• Max {MAX_CATEGORIES} catégories.\n"
@@ -77,14 +74,42 @@ class HelpView(View):
             "• Tapez `fin` pour terminer l'ajout.\n"
             "• Les salons et rôles seront mentionnés dynamiquement.\n"
         )
-        await interaction.response.send_message(text, ephemeral=True)
+        await interaction.response.send_message(guide, ephemeral=True)
+
+
+class ConfirmRemoveConfigView(View):
+    """Confirmation avant suppression de la configuration."""
+    def __init__(self, guild_id: str):
+        super().__init__(timeout=None)
+        self.guild_id = guild_id
+
+    @discord.ui.button(label="Oui, supprimer", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: Button):
+        await ticket_collection.delete_one({"guild_id": self.guild_id})
+        await interaction.response.edit_message(
+            content="✅ Configuration des tickets supprimée avec succès.",
+            view=None
+        )
+
+    @discord.ui.button(label="Annuler", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.edit_message(
+            content="❌ Suppression annulée.",
+            view=None
+        )
 
 
 class StartConfigView(View):
-    def __init__(self, channel: discord.TextChannel):
+    """Vue initiale du panneau de configuration."""
+    def __init__(self, channel: discord.TextChannel, disable_start: bool = False):
         super().__init__(timeout=None)
         self.channel = channel
-        self.add_item(HelpView().children[0])  # bouton d'aide
+        # bouton Aide
+        self.add_item(HelpView().children[0])
+        # désactiver le bouton "Commencer" si une config existe déjà
+        for child in self.children:
+            if isinstance(child, Button) and child.label == "🚀 Commencer la config":
+                child.disabled = disable_start
 
     @discord.ui.button(label="🚀 Commencer la config", style=discord.ButtonStyle.primary)
     async def start(self, interaction: discord.Interaction, button: Button):
@@ -93,19 +118,36 @@ class StartConfigView(View):
         await interaction.response.defer()
         await start_configuration(interaction.client, self.channel, interaction.user)
 
+    @discord.ui.button(label="🗑️ Supprimer config", style=discord.ButtonStyle.danger, custom_id="delete_config")
+    async def delete_config(self, interaction: discord.Interaction, button: Button):
+        if interaction.user != interaction.guild.owner and not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message(MESSAGES["PERMISSION_ERROR"], ephemeral=True)
+        await interaction.response.send_message(
+            "⚠️ Voulez-vous vraiment supprimer **toute** la configuration des tickets ?",
+            view=ConfirmRemoveConfigView(str(interaction.guild.id)),
+            ephemeral=True
+        )
+
 
 class Tickets(commands.Cog):
+    """Cog principal pour les commandes tickets."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @app_commands.command(name="config_tickets", description="Démarre la configuration du panneau de tickets")
     async def config_tickets(self, interaction: discord.Interaction):
-        if await ticket_collection.find_one({"guild_id": str(interaction.guild_id)}):
-            return await interaction.response.send_message(
-                "⚠️ Un panneau de tickets existe déjà pour ce serveur.", ephemeral=True
+        existing = await ticket_collection.find_one({"guild_id": str(interaction.guild_id)})
+        view = StartConfigView(interaction.channel, disable_start=bool(existing))
+
+        if existing:
+            embed = discord.Embed(
+                title="⚠️ Configuration existante",
+                description="Un panneau de tickets existe déjà. Vous pouvez le supprimer ou le modifier.",
+                color=EMBED_COLOR
             )
-        view = StartConfigView(interaction.channel)
-        embed = build_embed({}, [], "Cliquez sur 🚀 pour démarrer.")
+        else:
+            embed = build_embed({}, [], "Cliquez sur 🚀 pour démarrer.")
+
         await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(name="panel_tickets", description="Envoie le panneau de tickets dans le salon spécifié")
@@ -141,7 +183,7 @@ async def start_configuration(bot: commands.Bot, channel: discord.TextChannel, a
     text_steps = [
         ("title", "Entrez le **titre** du panneau"),
         ("description", "Entrez la **description**"),
-        ("footer", "Entrez le **footer** (ou tapez 'aucun')")
+        ("footer", "Entrez le **footer** (ou tapez `aucun`)")
     ]
     embed_msg = await channel.send(embed=build_embed(data, categories, text_steps[0][1]))
 
@@ -151,13 +193,13 @@ async def start_configuration(bot: commands.Bot, channel: discord.TextChannel, a
             msg = await bot.wait_for("message", check=check, timeout=120)
         except asyncio.TimeoutError:
             return await embed_msg.edit(
-                embed=discord.Embed(description="⏰ Temps écoulé, relancez /config_tickets.", color=0xFF0000)
+                embed=discord.Embed(description="⏰ Temps écoulé, relancez `/config_tickets`.", color=0xFF0000)
             )
         content = msg.content.strip()
         data[key] = None if (key == "footer" and content.lower() == "aucun") else content
         await msg.delete()
 
-    # Salon transcripts
+    # Sélection du salon transcripts
     await embed_msg.edit(embed=build_embed(data, categories, "Sélectionnez le salon de transcripts"))
     sel_view = View(timeout=None)
     sel = ChannelSelect(channel_types=[discord.ChannelType.text], placeholder="Salon transcripts")
@@ -166,7 +208,6 @@ async def start_configuration(bot: commands.Bot, channel: discord.TextChannel, a
     async def sel_cb(i: discord.Interaction):
         result["transcript"] = sel.values[0].id
         await i.response.defer()
-
     sel.callback = sel_cb
     sel_view.add_item(sel)
     await channel.send(view=sel_view)
@@ -176,12 +217,12 @@ async def start_configuration(bot: commands.Bot, channel: discord.TextChannel, a
 
     # Ajout de catégories
     while len(categories) < MAX_CATEGORIES:
-        await embed_msg.edit(embed=build_embed(data, categories, "Entrez nom de catégorie ou tapez 'fin'"))
+        await embed_msg.edit(embed=build_embed(data, categories, "Entrez nom de catégorie ou tapez `fin`"))
         try:
             msg = await bot.wait_for("message", check=check, timeout=120)
         except asyncio.TimeoutError:
             return await embed_msg.edit(
-                embed=discord.Embed(description="⏰ Temps écoulé, relancez /config_tickets.", color=0xFF0000)
+                embed=discord.Embed(description="⏰ Temps écoulé, relancez `/config_tickets`.", color=0xFF0000)
             )
         name = msg.content.strip()
         await msg.delete()
@@ -189,20 +230,19 @@ async def start_configuration(bot: commands.Bot, channel: discord.TextChannel, a
             break
 
         # Description catégorie
-        await embed_msg.edit(embed=build_embed(data, categories, f"Description pour '{name}'"))
+        await embed_msg.edit(embed=build_embed(data, categories, f"Description pour `{name}`"))
         desc_msg = await bot.wait_for("message", check=check, timeout=120)
         desc = desc_msg.content.strip()
         await desc_msg.delete()
 
-        # Sélection rôles
-        await embed_msg.edit(embed=build_embed(data, categories, f"Sélectionnez les rôles pour '{name}'"))
+        # Sélection des rôles
+        await embed_msg.edit(embed=build_embed(data, categories, f"Sélectionnez les rôles pour `{name}`"))
         sel_roles = RoleSelect(min_values=1, max_values=5, placeholder="Rôles staff")
         rr, view_r = {}, View(timeout=None)
 
         async def rcb(i: discord.Interaction):
             rr["roles"] = [r.id for r in sel_roles.values]
             await i.response.defer()
-
         sel_roles.callback = rcb
         view_r.add_item(sel_roles)
         await channel.send(view=view_r)
@@ -210,14 +250,13 @@ async def start_configuration(bot: commands.Bot, channel: discord.TextChannel, a
             await asyncio.sleep(0.5)
 
         # Sélection catégorie parent
-        await embed_msg.edit(embed=build_embed(data, categories, f"Sélectionnez la catégorie parent pour '{name}'"))
+        await embed_msg.edit(embed=build_embed(data, categories, f"Sélectionnez la catégorie parent pour `{name}`"))
         sel_cat = ChannelSelect(channel_types=[discord.ChannelType.category], placeholder="Catégorie parent")
         rc, view_c = {}, View(timeout=None)
 
         async def ccb(i: discord.Interaction):
             rc["cat"] = sel_cat.values[0].id
             await i.response.defer()
-
         sel_cat.callback = ccb
         view_c.add_item(sel_cat)
         await channel.send(view=view_c)
@@ -230,12 +269,11 @@ async def start_configuration(bot: commands.Bot, channel: discord.TextChannel, a
             "roles": rr["roles"],
             "discord_category": rc["cat"]
         })
-
-        await embed_msg.edit(embed=build_embed(data, categories, f"Catégorie '{name}' ajoutée"))
+        await embed_msg.edit(embed=build_embed(data, categories, f"Catégorie `{name}` ajoutée"))
 
     if not categories:
         return await embed_msg.edit(
-            embed=discord.Embed(description="❌ Au moins une catégorie requise. Appuyé de nouveau sur Commencer.", color=0xFF0000)
+            embed=discord.Embed(description="❌ Au moins une catégorie requise. Appuyez de nouveau sur Commencer.", color=0xFF0000)
         )
 
     # Enregistrement en base
@@ -263,8 +301,8 @@ async def start_configuration(bot: commands.Bot, channel: discord.TextChannel, a
 
     # Confirmation finale
     final = discord.Embed(
-        title="Et voila c'est configuré!",
-        description="Faite la commande **/panel_tickets** pour affiché votre pannel!",
+        title="Et voilà c'est configuré !",
+        description="Faites la commande **/panel_tickets** pour afficher votre panneau !",
         color=EMBED_COLOR
     )
     if data.get("footer"):
@@ -272,7 +310,53 @@ async def start_configuration(bot: commands.Bot, channel: discord.TextChannel, a
     await embed_msg.edit(embed=final)
 
 
+class ConfirmDeleteView(View):
+    """View de confirmation pour suppression de ticket et envoi du transcript."""
+    def __init__(self, cfg: dict):
+        super().__init__(timeout=None)
+        self.cfg = cfg
+
+    @discord.ui.button(label="Oui, supprimer", style=discord.ButtonStyle.danger)
+    async def confirm_yes(self, interaction: discord.Interaction, button: Button):
+        chan = interaction.channel
+        member_id = chan.topic.split(":")[-1]
+        embed = discord.Embed(
+            title="✅ Voici le transcript !",
+            color=EMBED_COLOR,
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name="Membre concerné", value=f"<@{member_id}>", inline=False)
+        embed.add_field(name="Claimé par", value=interaction.user.mention, inline=False)
+
+        if self.cfg.get("transcript_channel"):
+            tgt = interaction.guild.get_channel(int(self.cfg["transcript_channel"]))
+            if tgt:
+                try:
+                    import chat_exporter
+                    html = await chat_exporter.export(
+                        chan, limit=None, tz_info="UTC", military_time=False
+                    )
+                    buf = io.BytesIO(html.encode()); buf.seek(0)
+                    file = discord.File(buf, filename="transcript.html")
+                    await tgt.send(embed=embed, file=file)
+                except Exception as e:
+                    error_embed = discord.Embed(
+                        title="⚠️ Erreur lors de l’envoi du transcript",
+                        description=str(e),
+                        color=0xFF0000,
+                        timestamp=discord.utils.utcnow()
+                    )
+                    await tgt.send(embed=error_embed)
+
+        await chan.delete()
+
+    @discord.ui.button(label="Annuler", style=discord.ButtonStyle.secondary)
+    async def confirm_no(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.edit_message(content="❌ Suppression annulée.", view=None)
+
+
 class TicketControlsView(View):
+    """Contrôles (claim, close, reopen, delete) sur chaque ticket créé."""
     def __init__(self, cfg: dict):
         super().__init__(timeout=None)
         self.cfg = cfg
@@ -291,7 +375,7 @@ class TicketControlsView(View):
         await ch.set_permissions(interaction.guild.default_role, view_channel=False)
         button.disabled = True
         for c in self.children:
-            if getattr(c, "label", None) == "♻️ Reopen":
+            if c.label == "♻️ Reopen":
                 c.disabled = False
         await interaction.response.edit_message(content="Ticket fermé.", view=self)
         await ch.send(f"Fermé par {interaction.user.mention}")
@@ -305,7 +389,7 @@ class TicketControlsView(View):
         await ch.edit(name=new)
         button.disabled = True
         for c in self.children:
-            if getattr(c, "label", None) == "🔒 Close":
+            if c.label == "🔒 Close":
                 c.disabled = False
         await interaction.response.edit_message(content="Ticket rouvert.", view=self)
         await ch.send(f"Rouvert par {interaction.user.mention}")
@@ -315,34 +399,8 @@ class TicketControlsView(View):
         await interaction.response.send_message("🔔 Confirm?", view=ConfirmDeleteView(self.cfg), ephemeral=True)
 
 
-class ConfirmDeleteView(View):
-    def __init__(self, cfg: dict):
-        super().__init__(timeout=None)
-        self.cfg = cfg
-
-    @discord.ui.button(label="Oui, supprimer", style=discord.ButtonStyle.danger)
-    async def confirm_yes(self, interaction: discord.Interaction, button: Button):
-        chan = interaction.channel
-        await interaction.response.send_message("Supprimé ✅", ephemeral=True)
-        log = discord.Embed(color=EMBED_COLOR, timestamp=discord.utils.utcnow())
-        if self.cfg.get("transcript_channel"):
-            tgt = interaction.guild.get_channel(int(self.cfg["transcript_channel"]))
-            if tgt:
-                try:
-                    import chat_exporter
-                    html = await chat_exporter.export(chan, limit=None, tz_info="UTC", military_time=False)
-                    buf = io.BytesIO(html.encode()); buf.seek(0)
-                    file = discord.File(buf, filename="transcript.html")
-                    await tgt.send(file=file)
-                    log.description = "✅ Transcript envoyé."
-                except Exception as e:
-                    log.description = f"⚠️ Erreur: {e}"
-                await tgt.send(embed=log)
-        await chan.send(f"Supprimé par {interaction.user.mention}")
-        await chan.delete()
-
-
 class TicketPanelView(View):
+    """Vue du panneau de sélection de catégorie pour création de ticket."""
     def __init__(self, cfg: dict):
         super().__init__(timeout=None)
         self.cfg = cfg
