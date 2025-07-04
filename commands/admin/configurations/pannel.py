@@ -229,10 +229,9 @@ class ConfigView(View):
                 missing.append(f"Catégorie Discord non définie pour « {name} »")
             if not data.get('roles'):
                 missing.append(f"Rôles non assignés pour « {name} »")
-        if not self.log_channel:
-            missing.append("Salon de logs non défini")
         if not self.transcript_channel:
             missing.append("Salon de transcripts non défini")
+        # salon de logs peut rester non défini
 
         if missing:
             return await interaction.response.send_message(
@@ -245,7 +244,7 @@ class ConfigView(View):
             'guild_id': str(self.guild_id),
             'panel_embed': self.embed_data,
             'categories': self.temp_categories,
-            'log_channel': str(self.log_channel),
+            'log_channel': str(self.log_channel) if self.log_channel else None,
             'transcript_channel': str(self.transcript_channel),
             'ticket_count': 0
         }
@@ -287,15 +286,16 @@ class ConfirmDeleteView(View):
             await interaction.guild.get_channel(int(self.cfg['transcript_channel'])).send(embed=log_embed)
 
         # Log suppression
-        log_ch = interaction.guild.get_channel(int(self.cfg['log_channel']))
-        if log_ch:
-            embed = discord.Embed(
-                title="Ticket supprimé",
-                description=f"Salon `{interaction.channel.name}` supprimé par {interaction.user.mention}",
-                color=EMBED_COLOR,
-                timestamp=datetime.utcnow()
-            )
-            await log_ch.send(embed=embed)
+        if self.cfg.get('log_channel'):
+            log_ch = interaction.guild.get_channel(int(self.cfg['log_channel']))
+            if log_ch:
+                embed = discord.Embed(
+                    title="Ticket supprimé",
+                    description=f"Salon `{interaction.channel.name}` supprimé par {interaction.user.mention}",
+                    color=EMBED_COLOR,
+                    timestamp=datetime.utcnow()
+                )
+                await log_ch.send(embed=embed)
 
         await interaction.channel.delete()
 
@@ -312,13 +312,13 @@ class TicketControlsView(View):
     @discord.ui.button(label="📥 Claim", style=discord.ButtonStyle.secondary, custom_id="claim")
     async def claim(self, interaction: discord.Interaction, button: Button):
         await interaction.channel.set_permissions(interaction.user, view_channel=True, send_messages=True)
-        await interaction.response.send_message(f"{interaction.user.mention} a claim.", ephemeral=True)
+        await interaction.response.send_message(f"{interaction.user.mention} a claim.")
 
     @discord.ui.button(label="🔒 Close", style=discord.ButtonStyle.danger, custom_id="close")
     async def close(self, interaction: discord.Interaction, button: Button):
-        if button.disabled or interaction.channel.name.startswith("ferme-"):
-            return await interaction.response.send_message("⚠️ Le ticket est déjà fermé.", ephemeral=True)
-
+        # Empêche double close
+        if interaction.channel.name.startswith("ferme-"):
+            return await interaction.response.send_message("⚠️ Le ticket est déjà fermé.")
         ch = interaction.channel
         await ch.edit(name=f"ferme-{ch.name}")
         await ch.set_permissions(interaction.guild.default_role, view_channel=False)
@@ -327,23 +327,24 @@ class TicketControlsView(View):
             if isinstance(c, Button) and c.custom_id == "reopen":
                 c.disabled = False
         await interaction.message.edit(view=self)
-        await interaction.response.send_message("Ticket fermé.", ephemeral=True)
+        await interaction.response.send_message("Ticket fermé.")
 
-        log_ch = interaction.guild.get_channel(int(self.cfg['log_channel']))
-        if log_ch:
-            embed = discord.Embed(
-                title="Ticket fermé",
-                description=f"Salon `{ch.name}` fermé par {interaction.user.mention}",
-                color=EMBED_COLOR,
-                timestamp=datetime.utcnow()
-            )
-            await log_ch.send(embed=embed)
+        if self.cfg.get('log_channel'):
+            log_ch = interaction.guild.get_channel(int(self.cfg['log_channel']))
+            if log_ch:
+                embed = discord.Embed(
+                    title="Ticket fermé",
+                    description=f"Salon `{ch.name}` fermé par {interaction.user.mention}",
+                    color=EMBED_COLOR,
+                    timestamp=datetime.utcnow()
+                )
+                await log_ch.send(embed=embed)
 
     @discord.ui.button(label="♻️ Reopen", style=discord.ButtonStyle.success, custom_id="reopen", disabled=True)
     async def reopen(self, interaction: discord.Interaction, button: Button):
-        if button.disabled or not interaction.channel.name.startswith("ferme-"):
-            return await interaction.response.send_message("⚠️ Le ticket est déjà ouvert.", ephemeral=True)
-
+        # Empêche double reopen
+        if not interaction.channel.name.startswith("ferme-"):
+            return await interaction.response.send_message("⚠️ Le ticket est déjà ouvert.")
         ch = interaction.channel
         new_name = ch.name.removeprefix("ferme-")
         await ch.edit(name=new_name)
@@ -352,17 +353,18 @@ class TicketControlsView(View):
             if isinstance(c, Button) and c.custom_id == "close":
                 c.disabled = False
         await interaction.message.edit(view=self)
-        await interaction.response.send_message("Ticket rouvert.", ephemeral=True)
+        await interaction.response.send_message("Ticket rouvert.")
 
-        log_ch = interaction.guild.get_channel(int(self.cfg['log_channel']))
-        if log_ch:
-            embed = discord.Embed(
-                title="Ticket rouvert",
-                description=f"Salon `{new_name}` rouvert par {interaction.user.mention}",
-                color=EMBED_COLOR,
-                timestamp=datetime.utcnow()
-            )
-            await log_ch.send(embed=embed)
+        if self.cfg.get('log_channel'):
+            log_ch = interaction.guild.get_channel(int(self.cfg['log_channel']))
+            if log_ch:
+                embed = discord.Embed(
+                    title="Ticket rouvert",
+                    description=f"Salon `{new_name}` rouvert par {interaction.user.mention}",
+                    color=EMBED_COLOR,
+                    timestamp=datetime.utcnow()
+                )
+                await log_ch.send(embed=embed)
 
     @discord.ui.button(label="🗑️ Delete", style=discord.ButtonStyle.secondary, custom_id="delete")
     async def delete(self, interaction: discord.Interaction, button: Button):
@@ -398,7 +400,6 @@ class TicketPanelView(View):
         if discord.utils.get(interaction.guild.text_channels, topic=topic):
             return await interaction.followup.send(MESSAGES.get('TICKET_EXISTS', "Vous avez déjà un ticket ouvert."), ephemeral=True)
 
-        # Incrément logique
         doc = await ticket_collection.find_one_and_update(
             {'guild_id': gid},
             {'$inc': {'ticket_count': 1}},
@@ -412,7 +413,6 @@ class TicketPanelView(View):
             topic=topic
         )
 
-        # Permissions
         await channel.set_permissions(interaction.guild.default_role, view_channel=False)
         await channel.set_permissions(interaction.user, view_channel=True, send_messages=True)
         for rid in cat['roles']:
