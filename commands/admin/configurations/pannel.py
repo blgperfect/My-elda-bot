@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Button, Select, Modal, TextInput, ChannelSelect, RoleSelect
 from datetime import datetime
+from pymongo import ReturnDocument
 
 from config.params import (
     EMBED_COLOR,
@@ -217,6 +218,29 @@ class ConfigView(View):
         if interaction.user.id != self.author.id:
             return await interaction.response.send_message(MESSAGES['PERMISSION_ERROR'], ephemeral=True)
 
+        # Vérification de la configuration
+        missing = []
+        if not self.embed_data.get('title') or not self.embed_data.get('description'):
+            missing.append("Embed incomplet (titre/description manquants)")
+        if len(self.temp_categories) == 0:
+            missing.append("Au moins une catégorie doit être ajoutée")
+        for name, data in self.temp_categories.items():
+            if not data.get('discord_category'):
+                missing.append(f"Catégorie Discord non définie pour « {name} »")
+            if not data.get('roles'):
+                missing.append(f"Rôles non assignés pour « {name} »")
+        if not self.log_channel:
+            missing.append("Salon de logs non défini")
+        if not self.transcript_channel:
+            missing.append("Salon de transcripts non défini")
+
+        if missing:
+            return await interaction.response.send_message(
+                "⚠️ Configuration incomplète :\n• " + "\n• ".join(missing),
+                ephemeral=True
+            )
+
+        # Sauvegarde en base
         data = {
             'guild_id': str(self.guild_id),
             'panel_embed': self.embed_data,
@@ -240,25 +264,29 @@ class ConfirmDeleteView(View):
 
     @discord.ui.button(label="Oui, supprimer", style=discord.ButtonStyle.danger, custom_id="confirm_yes")
     async def confirm_yes(self, interaction: discord.Interaction, button: Button):
-        # réponse avant suppression
         await interaction.response.send_message("Ticket supprimé ✅", ephemeral=True)
+        log_embed = discord.Embed(color=EMBED_COLOR, timestamp=datetime.utcnow())
 
-        # transcript automatique avec gestion d'erreur
+        # Gestion du transcript
         if self.cfg.get('transcript_channel'):
-            log_embed = discord.Embed(color=EMBED_COLOR, timestamp=datetime.utcnow())
-            try:
-                transcript = await generate_transcript(interaction.channel)
-                await interaction.guild.get_channel(int(self.cfg['transcript_channel'])).send(file=transcript)
-                log_embed.description = "✅ Transcript généré et envoyé."
-            except Exception as e:
+            if TRANSCRIPTS_AVAILABLE:
+                try:
+                    transcript = await generate_transcript(interaction.channel)
+                    await interaction.guild.get_channel(int(self.cfg['transcript_channel'])).send(file=transcript)
+                    log_embed.description = "✅ Transcript généré et envoyé."
+                except Exception as e:
+                    log_embed.description = (
+                        "⚠️ Échec génération transcript.\n"
+                        f"```{e}```"
+                    )
+            else:
                 log_embed.description = (
-                    "⚠️ Échec génération transcript.\n"
-                    "Assurez-vous que `py-discord-html-transcripts` est installé.\n"
-                    f"```{e}```"
+                    "⚠️ Impossible de générer le transcript : "
+                    "`py-discord-html-transcripts` non installé."
                 )
             await interaction.guild.get_channel(int(self.cfg['transcript_channel'])).send(embed=log_embed)
 
-        # log embed suppression
+        # Log suppression
         log_ch = interaction.guild.get_channel(int(self.cfg['log_channel']))
         if log_ch:
             embed = discord.Embed(
@@ -269,7 +297,6 @@ class ConfirmDeleteView(View):
             )
             await log_ch.send(embed=embed)
 
-        # suppression du channel
         await interaction.channel.delete()
 
     @discord.ui.button(label="Annuler", style=discord.ButtonStyle.secondary, custom_id="confirm_no")
@@ -289,6 +316,9 @@ class TicketControlsView(View):
 
     @discord.ui.button(label="🔒 Close", style=discord.ButtonStyle.danger, custom_id="close")
     async def close(self, interaction: discord.Interaction, button: Button):
+        if button.disabled or interaction.channel.name.startswith("ferme-"):
+            return await interaction.response.send_message("⚠️ Le ticket est déjà fermé.", ephemeral=True)
+
         ch = interaction.channel
         await ch.edit(name=f"ferme-{ch.name}")
         await ch.set_permissions(interaction.guild.default_role, view_channel=False)
@@ -311,6 +341,9 @@ class TicketControlsView(View):
 
     @discord.ui.button(label="♻️ Reopen", style=discord.ButtonStyle.success, custom_id="reopen", disabled=True)
     async def reopen(self, interaction: discord.Interaction, button: Button):
+        if button.disabled or not interaction.channel.name.startswith("ferme-"):
+            return await interaction.response.send_message("⚠️ Le ticket est déjà ouvert.", ephemeral=True)
+
         ch = interaction.channel
         new_name = ch.name.removeprefix("ferme-")
         await ch.edit(name=new_name)
@@ -359,14 +392,17 @@ class TicketPanelView(View):
         cat = self.cfg['categories'][sel]
         if not cat.get('discord_category'):
             return await interaction.followup.send("⚠️ Pas de catégorie Discord configurée.", ephemeral=True)
+
         gid = str(interaction.guild_id)
         topic = f"ticket:{gid}:{interaction.user.id}"
         if discord.utils.get(interaction.guild.text_channels, topic=topic):
-            msg = MESSAGES.get('TICKET_EXISTS', "Vous avez déjà un ticket ouvert.")
-            return await interaction.followup.send(msg, ephemeral=True)
+            return await interaction.followup.send(MESSAGES.get('TICKET_EXISTS', "Vous avez déjà un ticket ouvert."), ephemeral=True)
 
+        # Incrément logique
         doc = await ticket_collection.find_one_and_update(
-            {'guild_id': gid}, {'$inc': {'ticket_count': 1}}, return_document=True
+            {'guild_id': gid},
+            {'$inc': {'ticket_count': 1}},
+            return_document=ReturnDocument.AFTER
         )
         number = doc['ticket_count']
         name = f"{number}-{interaction.user.name}"
@@ -375,6 +411,8 @@ class TicketPanelView(View):
             category=interaction.guild.get_channel(int(cat['discord_category'])),
             topic=topic
         )
+
+        # Permissions
         await channel.set_permissions(interaction.guild.default_role, view_channel=False)
         await channel.set_permissions(interaction.user, view_channel=True, send_messages=True)
         for rid in cat['roles']:
@@ -385,6 +423,7 @@ class TicketPanelView(View):
         mentions = " ".join(
             r.mention for r in (interaction.guild.get_role(int(rid)) for rid in cat['roles']) if r
         ) or None
+
         embed = discord.Embed(
             title=self.cfg['panel_embed']['title'],
             description=cat['description'],
