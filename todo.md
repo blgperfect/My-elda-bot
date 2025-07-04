@@ -144,3 +144,13 @@ Un document par serveur, exemple :
 
 
 commence par me faire le code en entier sans transcription on ajusteras ensuite
+
+
+
+erreur percu 
+1. l'image dans image url n'est pas affiché dans le menu
+plus erreur du bouton close, 
+quand on appuie sur delete une double verification devrais etre demandé 
+3 la mentions doit etre hors embed pas dans le embed 
+message du bot pour la transcription : 
+impossibilie de généré le transcript : lib manquante
