@@ -9,7 +9,7 @@ BOT_INVITE = "https://discord.com/oauth2/authorize?client_id=1387873062841745479
 # === Apparence des embeds ===
 EMBED_COLOR = 0xE3BAE8
 EMBED_FOOTER_TEXT = "©𝐸𝓁𝒹𝒶 𝐵𝑜𝓉"
-EMBED_FOOTER_ICON_URL = "https://cdn.discordapp.com/attachments/1102406059722801184/1387882570263433236/IMG_8167.png"
+EMBED_FOOTER_ICON_URL = "https://cdn.discordapp.com/attachments/1102406059722801184/1390780676995027008/IMG_8346.png?ex=686980f0&is=68682f70&hm=78587917ebb53163515197f145f2cf84d06b8895eac63a0a30a1d7e5f638d036&"
 EMBED_IMAGE_URL = "https://cdn.discordapp.com/attachments/1102406059722801184/1387886546300043264/0C5431CA-4920-413C-BBC7-0F18DA8C3D15.png"
 
 # === Propriétaire du bot & permissions par défaut ===
