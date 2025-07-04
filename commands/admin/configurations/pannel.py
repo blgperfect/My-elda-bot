@@ -113,15 +113,11 @@ class StartConfigView(View):
 
     @discord.ui.button(label="🚀 Commencer la config", style=discord.ButtonStyle.primary)
     async def start(self, interaction: discord.Interaction, button: Button):
-        if interaction.user != interaction.guild.owner and not interaction.user.guild_permissions.manage_guild:
-            return await interaction.response.send_message(MESSAGES["PERMISSION_ERROR"], ephemeral=True)
         await interaction.response.defer()
         await start_configuration(interaction.client, self.channel, interaction.user)
 
     @discord.ui.button(label="🗑️ Supprimer config", style=discord.ButtonStyle.danger, custom_id="delete_config")
     async def delete_config(self, interaction: discord.Interaction, button: Button):
-        if interaction.user != interaction.guild.owner and not interaction.user.guild_permissions.manage_guild:
-            return await interaction.response.send_message(MESSAGES["PERMISSION_ERROR"], ephemeral=True)
         await interaction.response.send_message(
             "⚠️ Voulez-vous vraiment supprimer **toute** la configuration des tickets ?",
             view=ConfirmRemoveConfigView(str(interaction.guild.id)),
@@ -135,6 +131,8 @@ class Tickets(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="config_tickets", description="Démarre la configuration du panneau de tickets")
+    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def config_tickets(self, interaction: discord.Interaction):
         existing = await ticket_collection.find_one({"guild_id": str(interaction.guild_id)})
         view = StartConfigView(interaction.channel, disable_start=bool(existing))
@@ -148,9 +146,11 @@ class Tickets(commands.Cog):
         else:
             embed = build_embed({}, [], "Cliquez sur 🚀 pour démarrer.")
 
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     @app_commands.command(name="panel_tickets", description="Envoie le panneau de tickets dans le salon spécifié")
+    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.describe(channel="Salon où poster le panneau de tickets")
     async def panel_tickets(self, interaction: discord.Interaction, channel: discord.TextChannel):
         cfg = await ticket_collection.find_one({"guild_id": str(interaction.guild_id)})
@@ -363,7 +363,12 @@ class TicketControlsView(View):
 
     @discord.ui.button(label="📥 Claim", style=discord.ButtonStyle.secondary)
     async def claim(self, interaction: discord.Interaction, button: Button):
-        await interaction.channel.set_permissions(interaction.user, view_channel=True, send_messages=True)
+        await interaction.channel.set_permissions(
+            interaction.user,
+            view_channel=True,
+            send_messages=True,
+            read_message_history=True
+        )
         await interaction.response.send_message(f"{interaction.user.mention} a claim.", ephemeral=True)
 
     @discord.ui.button(label="🔒 Close", style=discord.ButtonStyle.danger)
@@ -371,12 +376,33 @@ class TicketControlsView(View):
         ch = interaction.channel
         if ch.name.startswith("ferme-"):
             return await interaction.response.send_message("⚠️ Déjà fermé.", ephemeral=True)
+
         await ch.edit(name=f"ferme-{ch.name}")
-        await ch.set_permissions(interaction.guild.default_role, view_channel=False)
+        # désactiver @everyone
+        await ch.set_permissions(
+            interaction.guild.default_role,
+            view_channel=False,
+            send_messages=False
+        )
+        # retirer accès opener
+        try:
+            opener_id = int(ch.topic.split(":")[-1])
+            opener = interaction.guild.get_member(opener_id)
+            if opener:
+                await ch.set_permissions(
+                    opener,
+                    view_channel=False,
+                    send_messages=False,
+                    read_message_history=False
+                )
+        except Exception:
+            pass
+
         button.disabled = True
         for c in self.children:
             if c.label == "♻️ Reopen":
                 c.disabled = False
+
         await interaction.response.edit_message(content="Ticket fermé.", view=self)
         await ch.send(f"Fermé par {interaction.user.mention}")
 
@@ -385,12 +411,26 @@ class TicketControlsView(View):
         ch = interaction.channel
         if not ch.name.startswith("ferme-"):
             return await interaction.response.send_message("⚠️ Déjà ouvert.", ephemeral=True)
-        new = ch.name.removeprefix("ferme-")
-        await ch.edit(name=new)
+        await ch.edit(name=ch.name.removeprefix("ferme-"))
+
+        try:
+            opener_id = int(ch.topic.split(":")[-1])
+            opener = interaction.guild.get_member(opener_id)
+            if opener:
+                await ch.set_permissions(
+                    opener,
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True
+                )
+        except Exception:
+            pass
+
         button.disabled = True
         for c in self.children:
             if c.label == "🔒 Close":
                 c.disabled = False
+
         await interaction.response.edit_message(content="Ticket rouvert.", view=self)
         await ch.send(f"Rouvert par {interaction.user.mention}")
 
@@ -423,23 +463,25 @@ class TicketPanelView(View):
         doc = await ticket_collection.find_one_and_update(
             {"guild_id": gid}, {"$inc": {"ticket_count": 1}}, return_document=ReturnDocument.AFTER
         )
-        num = doc["ticket_count"]
-        name = f"{num}-{interaction.user.name}"
-        ch = await interaction.guild.create_text_channel(
-            name=name,
-            category=interaction.guild.get_channel(int(cat["discord_category"])),
-            topic=topic
-        )
-        await ch.set_permissions(interaction.guild.default_role, view_channel=False)
-        await ch.set_permissions(interaction.user, view_channel=True, send_messages=True)
+        name = f"{doc['ticket_count']}-{interaction.user.name}"
 
-        mentions = []
+        overwrites = {
+            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
+            interaction.user:           discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+        }
         for rid in cat["roles"]:
             role = interaction.guild.get_role(int(rid))
             if role:
-                await ch.set_permissions(role, view_channel=True, send_messages=True)
-                mentions.append(role.mention)
+                overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
 
+        ch = await interaction.guild.create_text_channel(
+            name=name,
+            category=interaction.guild.get_channel(int(cat["discord_category"])),
+            topic=topic,
+            overwrites=overwrites
+        )
+
+        mentions = [r.mention for r in overwrites if isinstance(r, discord.Role)]
         emb = discord.Embed(
             title=self.cfg["panel_embed"]["title"],
             description=cat["description"],
