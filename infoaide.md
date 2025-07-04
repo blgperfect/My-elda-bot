@@ -287,32 +287,3 @@ te permet de supprimé des message
 
 
 
-
-async def render_profile_to_image(data: dict) -> BytesIO:
-    """Rendu du template HTML en PNG, avec le background visible."""
-    html = template.render(
-        avatar_url=data.get("avatar_url", ""),
-        nickname=data.get("nickname") or "inconnu",
-        age=data.get("age") or "inconnu",
-        gender=data.get("gender") or "inconnu",
-        pronoun=data.get("pronoun") or "inconnu",
-        birthday=data.get("birthday") or "inconnu",
-        description=data.get("description") or "aucune"
-    )
-
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch()
-        page = await browser.new_page(viewport={"width": 600, "height": 350})
-        await page.set_content(html, wait_until="networkidle")
-
-        # On capture la page entière (la zone 600×350) y compris le background CSS
-        png = await page.screenshot(
-            omit_background=False,
-            clip={"x": 0, "y": 0, "width": 600, "height": 350}
-        )
-
-        await browser.close()
-
-    buf = BytesIO(png)
-    buf.seek(0)
-    return buf
