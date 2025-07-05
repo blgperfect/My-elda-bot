@@ -137,3 +137,43 @@ EMOJIS = {
     "DOWN": "⬇️",
     "LINK": "🔗"
 }
+
+# === Questions pour les modals d’application ===
+APPLICATION_QUESTIONS = {
+    "Administrateur": [
+        ("q1", "Peux-tu décrire ton parcours d’administration (serveurs, bots, modération) et les outils que tu maîtrises ?", 400),
+        ("q2", "As-tu déjà mis en place des automations (backups, permissions, logs) ? Si oui, comment ?", 400),
+        ("q3", "Comment tiendrais-tu l’équipe informée des mises à jour, incidents ou décisions stratégiques ?", 400),
+        ("q4", "Deux modérateurs sont en désaccord sur le traitement d’un utilisateur VIP : comment arbitres‐tu la situation ?", 400),
+        ("q5", "Un mot pour la fin ?", 200),
+    ],
+    "Modérateur": [
+        ("q1", "Pourquoi souhaites-tu devenir modérateur et quels créneaux horaires es-tu disponible ?", 300),
+        ("q2", "Comment expliques-tu notre charte de conduite à un membre qui la découvre pour la première fois ?", 400),
+        ("q3", "Décris ta procédure face à un spam massif ou à un contenu sensible (harcèlement, radicalisation).", 400),
+        ("q4", "Comment rédiges-tu un message privé constructif pour avertir un membre ayant enfreint les règles ?", 300),
+        ("q5", "Un mot pour la fin ?", 200),
+    ],
+    "Animateur": [
+        ("q1", "Comment prépares-tu un événement (quiz, tournoi, AMA) pour qu’il soit fluide et engageant ?", 400),
+        ("q2", "Si un problème technique survient en direct (bot qui bug, salon vocal qui plante), quelle est ta réaction ?", 400),
+        ("q3", "Comment gères-tu un participant perturbateur tout en préservant l’ambiance générale ?", 400),
+        ("q4", "Quelle méthode utilises-tu pour recueillir et exploiter les retours post-événement afin de t’améliorer ?", 400),
+        ("q5", "Nomme-moi des activités que tu aimerais faire ?", 300),
+    ],
+    "Community Manager": [
+        ("q1", "Quelle action proposerais-tu pour renforcer l’engagement de la communauté et pourquoi ?", 400),
+        ("q2", "Combien de partenariats as-tu faits ? Dans combien de serveurs as-tu ce rôle ?", 300),
+        ("q3", "Quels réseaux sociaux externes utiliserais-tu pour promouvoir notre serveur ?", 300),
+        ("q4", "Décris ta démarche pour trouver un nouveau partenaire, conclure un accord et mesurer le succès du partenariat ?", 400),
+        ("q5", "Pourquoi te choisir, toi ?", 300),
+    ],
+}
+
+# === Messages spécifiques pour le module apply ===
+MESSAGES.update({
+    "NOT_CONFIGURED": "❌ Le système n'est pas encore configuré. Faites `/apply setup` d'abord.",
+    "NO_APPS_ENABLED": "❌ Aucune application n'est activée. Refaire `/apply setup` pour cocher des postes.",
+    "REFUSE_DM": "Désolé, vous avez été refusé pour le poste que vous avez sélectionné sur **{server}**. Merci d'avoir postulé !",
+    "REFUSE_DM_FAILED": "📪 Impossible d’envoyer un message privé à {user}. Veuillez le contacter manuellement.",
+})
