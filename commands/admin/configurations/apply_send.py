@@ -5,8 +5,12 @@ from discord import app_commands
 from discord.ext import commands
 from config.mongo import apply_collection
 from config.params import (
-    EMBED_COLOR, EMBED_FOOTER_TEXT, EMBED_FOOTER_ICON_URL,
-    MESSAGES, EMOJIS, APPLICATION_QUESTIONS
+    EMBED_COLOR,
+    EMBED_FOOTER_TEXT,
+    EMBED_FOOTER_ICON_URL,
+    MESSAGES,
+    EMOJIS,
+    APPLICATION_QUESTIONS
 )
 
 class ApplyFlowCog(commands.Cog):
@@ -69,6 +73,7 @@ class ApplyFlowCog(commands.Cog):
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type != discord.InteractionType.component:
             return
+
         data = interaction.data
         cid = data.get("custom_id", "")
 
@@ -123,7 +128,7 @@ class ApplyFlowCog(commands.Cog):
                         custom_id=f"apply_refuse:{res.inserted_id}"
                     ))
 
-                    # ⚠️ await find_one pour récupérer à nouveau la conf
+                    # ⚠️ await find_one pour récupérer la conf
                     cfg2 = await apply_collection.find_one({"server_id": guild_id})
                     staff_ch = interaction.guild.get_channel(cfg2["channel_id"])
                     await staff_ch.send(embed=eb, view=view)
@@ -149,9 +154,14 @@ class ApplyFlowCog(commands.Cog):
                 try:
                     await member.send(MESSAGES["REFUSE_DM"].format(server=interaction.guild.name))
                 except discord.Forbidden:
-                    await interaction.channel.send(MESSAGES["REFUSE_DM_FAILED"].format(user=member.mention))
+                    await interaction.channel.send(
+                        MESSAGES["REFUSE_DM_FAILED"].format(user=member.mention)
+                    )
                 # ⚠️ await update
-                await apply_collection.update_one({"_id": app_id}, {"$set": {"status": "refused"}})
+                await apply_collection.update_one(
+                    {"_id": app_id},
+                    {"$set": {"status": "refused"}}
+                )
                 return await interaction.response.send_message(
                     embed=discord.Embed(
                         description=f"{EMOJIS['CROSS']} {member.mention} a été refusé.",
@@ -166,7 +176,10 @@ class ApplyFlowCog(commands.Cog):
             role = interaction.guild.get_role(role_id)
             await member.add_roles(role, reason="Candidature acceptée")
             # ⚠️ await update
-            await apply_collection.update_one({"_id": app_id}, {"$set": {"status": "accepted"}})
+            await apply_collection.update_one(
+                {"_id": app_id},
+                {"$set": {"status": "accepted"}}
+            )
             return await interaction.response.send_message(
                 embed=discord.Embed(
                     description=f"{EMOJIS['CHECK']} Rôle {role.mention} attribué à {member.mention}.",

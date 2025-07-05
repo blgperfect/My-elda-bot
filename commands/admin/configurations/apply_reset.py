@@ -22,7 +22,7 @@ class ResetView(discord.ui.View):
 
     @discord.ui.button(label="✅ Confirmer", style=discord.ButtonStyle.danger, custom_id="reset_confirm")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Suppression effective
+        # ⚠️ await delete_many
         await apply_collection.delete_many({"server_id": self.guild_id})
         eb = discord.Embed(
             description=f"{EMOJIS['CHECK']} Configuration remise à zéro.",
@@ -39,27 +39,31 @@ class ApplyResetCog(commands.Cog):
     async def apply_reset(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        # Permissions
         if not interaction.user.guild_permissions.administrator:
             return await interaction.followup.send(
                 embed=discord.Embed(description=MESSAGES["PERMISSION_ERROR"], color=EMBED_COLOR),
                 ephemeral=True
             )
 
-        # Vérification async de l'existence de config
+        # ⚠️ await count_documents
         count = await apply_collection.count_documents({"server_id": interaction.guild.id})
         if count == 0:
             eb = discord.Embed(
-                description=f"{EMOJIS['WARNING']} Il n'y a rien à réinitialiser. Utilisez la commande `/apply_setup` !",
+                description=(
+                    f"{EMOJIS['WARNING']} Rien à réinitialiser. "
+                    "Utilisez `/apply_setup` pour configurer."
+                ),
                 color=EMBED_COLOR
             )
             eb.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
             return await interaction.followup.send(embed=eb, ephemeral=True)
 
-        # Si au moins un document, on affiche la confirmation
         view = ResetView(interaction.guild.id)
         eb = discord.Embed(
-            description=f"{EMOJIS['WARNING']} Attention, cela supprimera toute la configuration du serveur. Confirmez ?",
+            description=(
+                f"{EMOJIS['WARNING']} Attention : cela supprimera toute la configuration du serveur. "
+                "Confirmez ?"
+            ),
             color=EMBED_COLOR
         )
         eb.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
