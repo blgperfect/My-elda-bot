@@ -66,7 +66,7 @@ class ApplySetupCog(commands.Cog):
                     ephemeral=True
                 )
 
-            # Sauvegarde
+            # Sauvegarde applications + salon
             await apply_collection.update_one(
                 {"server_id": guild_id},
                 {"$set": {"applications_enabled": chosen_apps}},
@@ -80,7 +80,6 @@ class ApplySetupCog(commands.Cog):
                 guild_id=guild_id
             )
 
-        # ASSIGNATION DU CALLBACK AVANT ENVOI
         app_select.callback = on_apps_select
         app_view.add_item(app_select)
 
@@ -102,13 +101,11 @@ class ApplySetupCog(commands.Cog):
         guild_id: int
     ):
         app_name = chosen_apps[idx]
-        # Récupération des rôles
         roles = [
             r for r in interaction.guild.roles
             if not r.managed and r != interaction.guild.default_role
         ]
         if not roles:
-            # Si pas de rôle à configurer
             await interaction.response.send_message(
                 embed=discord.Embed(
                     description=f"❌ Aucun rôle disponible pour **{app_name}**.",
@@ -118,7 +115,6 @@ class ApplySetupCog(commands.Cog):
             )
             return
 
-        # Création du Select
         role_select = discord.ui.Select(
             placeholder=f"Choisissez les rôles pour {app_name}",
             options=[discord.SelectOption(label=r.name, value=str(r.id)) for r in roles],
@@ -129,7 +125,6 @@ class ApplySetupCog(commands.Cog):
 
         async def on_role_select(role_inter: discord.Interaction):
             role_ids = [int(v) for v in role_select.values]
-            # Sauvegarde
             await apply_collection.update_one(
                 {"server_id": guild_id},
                 {"$set": {f"roles_by_app.{app_name}": role_ids}},
@@ -138,7 +133,6 @@ class ApplySetupCog(commands.Cog):
             mentions = " ".join(f"<@&{rid}>" for rid in role_ids)
 
             if idx + 1 < len(chosen_apps):
-                # Passage à l'app suivante
                 await role_inter.response.edit_message(
                     embed=discord.Embed(
                         description=(
@@ -156,7 +150,6 @@ class ApplySetupCog(commands.Cog):
                     guild_id=guild_id
                 )
             else:
-                # Fin de la configuration
                 await role_inter.response.edit_message(
                     embed=discord.Embed(
                         description=(
@@ -169,11 +162,9 @@ class ApplySetupCog(commands.Cog):
                     view=None
                 )
 
-        # ASSIGNATION DU CALLBACK AVANT ENVOI
         role_select.callback = on_role_select
         view.add_item(role_select)
 
-        # Envoi (ou édition) du message
         try:
             await interaction.response.edit_message(
                 embed=discord.Embed(

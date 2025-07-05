@@ -84,3 +84,12 @@ tout les message en embed = from config.params import (
     MESSAGES,
     EMOJIS,
 )
+
+
+
+salut voici , mes code , tout dabbord je souhaiterais que la commande /apply send envoie le embed la ou l'Admin veeux sans utulisé le salon préenregistrer
+
+ensuite tu concerve comme ses pour le reste genre la ou la candidature est envoyer ok?
+
+
+erreeur actuelle ? mon code ne semble pas reconnaitre les role qui on ete enregistrer dans le code setup par l'Admin
