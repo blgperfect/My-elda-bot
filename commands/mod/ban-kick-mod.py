@@ -29,6 +29,8 @@ class ModLogView(View):
         self.guild_warns = guild_warns
 
     def make_embed(self) -> discord.Embed:
+        # Clamp de la page pour éviter les IndexError
+        self.page = max(0, min(self.page, len(self.entries) - 1))
         entry = self.entries[self.page]
         embed = discord.Embed(
             title="📋 Logs de modération",
@@ -219,7 +221,6 @@ class Moderation(commands.Cog):
         all_warns = [a for a in doc['actions'] if a['action'] == 'warn']
         total_warns = len(all_warns)
         guild_warns = len([a for a in all_warns if a['guild_id'] == interaction.guild.id])
-        kicked = False
 
         title = EMOJIS.get('CHECK', '✅') + f" Avertissement #{guild_warns}"
         desc = f"{member.mention} averti pour :\n> {reason}"
@@ -330,8 +331,16 @@ class Moderation(commands.Cog):
             key=lambda a: a['timestamp'],
             reverse=True
         )
-        view = ModLogView(entries, interaction.user.id, total_warns, guild_warns)
+        if not entries:
+            embed = discord.Embed(
+                title=EMOJIS.get('INFO', 'ℹ️') + " Aucun kick/ban trouvé",
+                description=f"{member.mention} n'a subi aucun kick ni ban sur ce serveur.",
+                color=EMBED_COLOR
+            )
+            embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
+        view = ModLogView(entries, interaction.user.id, total_warns, guild_warns)
         await interaction.response.send_message(embed=view.make_embed(), view=view, ephemeral=True)
 
     @mod.command(name="setup", description="Configure le salon des logs de modération.")
