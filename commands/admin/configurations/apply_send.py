@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 class AdminActionView(discord.ui.View):
     def __init__(self, member: discord.Member, app_name: str, channel: discord.TextChannel, cfg: dict):
-        super().__init__(timeout=None)
+        super().__init__(timeout=None)  # pas d'expiration automatique
         self.member = member
         self.app_name = app_name
         self.channel = channel
@@ -27,14 +27,15 @@ class AdminActionView(discord.ui.View):
 
     @discord.ui.button(label="Accepter", style=discord.ButtonStyle.success)
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Vérifie d'abord si le bot a la permission de gérer les rôles
+        # Vérification des permissions du bot
         me = interaction.guild.me
-        if not interaction.guild.me.guild_permissions.manage_roles:
+        if not me.guild_permissions.manage_roles:
             return await interaction.response.send_message(
-                "❌ Je n'ai pas la permission `Gérer les rôles`. Merci de la m'accorder.",
+                "❌ Je n'ai pas la permission `Gérer les rôles`. Merci de me l'accorder.",
                 ephemeral=True
             )
 
+        # Récupère l'ID de rôle configuré
         roles_map = self.cfg.get("application_roles", {})
         role_id = roles_map.get(self.app_name)
         if not role_id:
@@ -45,15 +46,21 @@ class AdminActionView(discord.ui.View):
         role = interaction.guild.get_role(role_id)
         if not role:
             return await interaction.response.send_message(
-                f"❌ Le rôle configuré (ID {role_id}) est introuvable sur ce serveur.", ephemeral=True
+                f"❌ Le rôle (ID {role_id}) est introuvable sur ce serveur.", ephemeral=True
             )
 
-        # Vérifie la hiérarchie : le bot doit être au-dessus du rôle cible
+        # Vérifie la hiérarchie
         if me.top_role <= role:
             return await interaction.response.send_message(
-                "❌ Je ne peux pas attribuer ce rôle car il est supérieur ou égal à mon rôle le plus haut.",
+                "❌ Je ne peux pas attribuer ce rôle car il est supérieur ou égal à mon rôle le plus élevé.",
                 ephemeral=True
             )
+
+        # Désactive les boutons pour toutes les actions
+        for child in self.children:
+            child.disabled = True
+        # On édite le message d'origine (celui qui contient les boutons)
+        await interaction.message.edit(view=self)
 
         # Tente d'ajouter le rôle
         try:
@@ -64,19 +71,24 @@ class AdminActionView(discord.ui.View):
             )
             log.info("Rôle %s attribué à %s", role.name, self.member)
         except discord.Forbidden:
-            await interaction.response.send_message(
-                "❌ Impossible d'ajouter le rôle en raison de permissions manquantes ou d'une hiérarchie trop élevée.",
+            await interaction.followup.send(
+                "❌ Impossible d'ajouter le rôle (permissions ou hiérarchie).",
                 ephemeral=True
             )
         except Exception as e:
             log.exception("Erreur lors de l'ajout du rôle", exc_info=e)
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "❌ Une erreur est survenue lors de l'attribution du rôle.",
                 ephemeral=True
             )
 
     @discord.ui.button(label="Refuser", style=discord.ButtonStyle.danger)
     async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Désactive les boutons
+        for child in self.children:
+            child.disabled = True
+        await interaction.message.edit(view=self)
+
         dm_message = (
             f"Désolé {self.member.name}, vous avez été refusé pour le poste **{self.app_name}** "
             f"sur le serveur **{interaction.guild.name}**."
@@ -84,12 +96,12 @@ class AdminActionView(discord.ui.View):
         try:
             await self.member.send(dm_message)
             await interaction.response.send_message(
-                f"Utilisateur {self.member.mention} informé en DM du refus.", ephemeral=False
+                f"Utilisateur {self.member.mention} informé du refus en DM.", ephemeral=False
             )
         except discord.Forbidden:
             await interaction.response.send_message(
-                f"Le message privé à {self.member.mention} n'a pas pu être envoyé. "
-                "Veuillez le contacter manuellement.", ephemeral=False
+                f"❌ Impossible d'envoyer le DM à {self.member.mention}. Merci de le contacter manuellement.",
+                ephemeral=False
             )
 
 
@@ -126,7 +138,6 @@ class ApplySendView(discord.ui.View):
                 super().__init__()
                 modal_self.app_name = app_name
                 modal_self.questions = questions
-
                 for key, text, mx in questions:
                     label = text if len(text) <= 45 else text[:42].rstrip() + "..."
                     modal_self.add_item(
@@ -144,10 +155,9 @@ class ApplySendView(discord.ui.View):
                 log.info("AppModal.on_submit démarré pour %s", modal_inter.user)
                 answers = {item.custom_id: item.value for item in modal_self.children}
 
-                # Prépare la config en surchargeant le channel staff configuré dans setup
+                # Prépare la config en surchargeant le channel staff configuré via /apply_setup
                 owner_cog = modal_inter.client.get_cog("ApplyFlowCog")
                 cfg = owner_cog.cfg.copy()
-                cfg["channel_id"] = cfg.get("channel_id")  # salon configuré via /apply_setup
                 cfg["application_roles"] = owner_cog.cfg.get("application_roles", {})
 
                 # Enregistrement de la candidature
@@ -162,7 +172,7 @@ class ApplySendView(discord.ui.View):
                 }
                 await apply_collection.insert_one(doc)
 
-                # Embed staff
+                # Prépare l’embed pour le staff
                 embed_admin = discord.Embed(
                     title=f"Nouvelle candidature — {modal_self.app_name}",
                     description=f"Membre : {modal_inter.user.mention}",
@@ -172,12 +182,12 @@ class ApplySendView(discord.ui.View):
                 for key, text, _ in modal_self.questions:
                     embed_admin.add_field(name=text, value=answers.get(key, "—"), inline=False)
 
-                staff_channel = modal_inter.guild.get_channel(cfg["channel_id"])
+                staff_channel = modal_inter.guild.get_channel(cfg.get("channel_id"))
                 if staff_channel:
                     view = AdminActionView(modal_inter.user, modal_self.app_name, staff_channel, cfg)
                     await staff_channel.send(embed=embed_admin, view=view)
                 else:
-                    log.warning("Salon de réception non trouvé (ID %s)", cfg["channel_id"])
+                    log.warning("Salon de réception non trouvé (ID %s)", cfg.get("channel_id"))
 
                 await modal_inter.response.send_message(
                     "✅ Merci ! Votre candidature a bien été enregistrée.",
@@ -207,7 +217,7 @@ class ApplyFlowCog(commands.Cog):
     async def apply_send(self, interaction: discord.Interaction):
         log.info("Commande /apply_send invoquée par %s", interaction.user)
 
-        # Chargement de la configuration (canal staff + mapping roles_by_app)
+        # Chargement de la configuration
         self.cfg = await apply_collection.find_one({"server_id": interaction.guild.id}) or {}
 
         if not self.cfg.get("applications_enabled"):
@@ -223,14 +233,10 @@ class ApplyFlowCog(commands.Cog):
         # Conversion en int des rôles_by_app
         roles_map = self.cfg.get("roles_by_app", {})
         self.cfg["roles_by_app"] = {app: [int(r) for r in lst] for app, lst in roles_map.items()}
-        # Prépare mapping simple pour AdminActionView (1er rôle si plusieurs)
+        # Mapping simple pour AdminActionView (1er rôle si plusieurs)
         self.cfg["application_roles"] = {app: ids[0] for app, ids in self.cfg["roles_by_app"].items()}
 
-        # Surcharge dynamique du salon staff reste la config de setup
-        # L'embed candidat est posté directement dans le salon courant
-        self.cfg["channel_id"] = self.cfg.get("channel_id")
-
-        # Embed candidat
+        # L’embed candidat est envoyé dans le salon courant ; les candidatures staff iront dans channel_id de la config
         embed = discord.Embed(
             title="📋 Menu de candidature",
             description="Sélectionnez le poste pour lequel vous souhaitez postuler :",
@@ -242,7 +248,10 @@ class ApplyFlowCog(commands.Cog):
 
         view = ApplySendView(self.cfg)
         await interaction.response.send_message(embed=embed, view=view)
-        log.info("Menu de candidature envoyé dans #%s (ID %d)", interaction.channel.name, interaction.channel_id)
+        log.info(
+            "Menu de candidature envoyé dans #%s (ID %d)",
+            interaction.channel.name, interaction.channel_id
+        )
 
 
 async def setup(bot: commands.Bot):
