@@ -49,10 +49,10 @@ class TicketConfigCog(commands.Cog):
                 continue
         if not role_ids:
             return await interaction.response.send_message(
-                "️️️⚠️ Veuillez mentionner au moins un rôle valide pour support_roles.", ephemeral=True
+                "⚠️ Veuillez mentionner au moins un rôle valide pour support_roles.", ephemeral=True
             )
 
-        # Mise à jour MongoDB (ticket_counter initialisé si nécessaire)
+        # Mise à jour MongoDB
         config = await soutien_collection.find_one_and_update(
             {'guild_id': guild_id},
             {
@@ -76,7 +76,7 @@ class TicketConfigCog(commands.Cog):
             except Exception:
                 pass
 
-        # Création du nouveau panneau
+        # Création du panneau de ticket (non épinglé)
         embed = discord.Embed(
             title="🎫 Créer un ticket",
             description=(
@@ -88,7 +88,6 @@ class TicketConfigCog(commands.Cog):
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
         view = TicketPanelView(self.bot)
         msg = await panel.send(embed=embed, view=view)
-        await msg.pin()
 
         await soutien_collection.update_one(
             {'guild_id': guild_id},
@@ -133,8 +132,6 @@ class TicketPanelView(View):
                 overwrites[role] = discord.PermissionOverwrite(
                     view_channel=True, read_messages=True, send_messages=True, read_message_history=True
                 )
-        # Les admins gardent l'accès
-        overwrites[interaction.guild.roles[0]] = discord.PermissionOverwrite(view_channel=True)
 
         channel = await interaction.guild.create_text_channel(
             name=name,
@@ -143,6 +140,7 @@ class TicketPanelView(View):
             topic=f"Ticket {name} créé par {interaction.user.id}"
         )
 
+        # Message d'accueil dans le ticket (épinglé)
         embed = discord.Embed(
             title="🎫 Ticket Ouvert",
             description=(
@@ -156,7 +154,9 @@ class TicketPanelView(View):
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
         mentions = ' '.join(f'<@&{r}>' for r in config.get('support_roles', []))
         welcome_view = TicketActionView(config)
-        await channel.send(mentions, embed=embed, view=welcome_view)
+        welcome_msg = await channel.send(mentions, embed=embed, view=welcome_view)
+        await welcome_msg.pin()
+
         await interaction.response.send_message(
             f"✅ Ticket créé : {channel.mention}", ephemeral=True
         )
