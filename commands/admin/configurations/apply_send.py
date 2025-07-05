@@ -13,79 +13,40 @@ from config.params import (
     APPLICATION_QUESTIONS
 )
 
-class ApplyFlowCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+class ApplySendView(discord.ui.View):
+    def __init__(self, cfg: dict):
+        super().__init__(timeout=None)
+        self.cfg = cfg
+        self.add_item(self.PostSelect(cfg["applications_enabled"]))
 
-    @app_commands.command(name="apply_send", description="Publie le menu de candidature")
-    async def apply_send(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
-        guild_id = interaction.guild.id
-        cfg = await apply_collection.find_one({"server_id": guild_id})
-        if not cfg or not cfg.get("applications_enabled"):
-            return await interaction.followup.send(
-                embed=discord.Embed(
-                    description=MESSAGES["NOT_CONFIGURED"],
-                    color=EMBED_COLOR
-                ),
-                ephemeral=False
+    class PostSelect(discord.ui.Select):
+        def __init__(self, apps: list[str]):
+            options = [discord.SelectOption(label=app, value=app) for app in apps]
+            super().__init__(
+                placeholder="Choisissez un poste…",
+                options=options,
+                custom_id="apply_modal"
             )
 
-        # Construction de l'embed menu
-        embed = discord.Embed(
-            title="📋 Menu de candidature",
-            description="Sélectionnez le poste pour lequel vous souhaitez postuler :",
-            color=EMBED_COLOR
-        )
-        for app in cfg["applications_enabled"]:
-            embed.add_field(name=app, value=EMOJIS.get(app, "📝"), inline=True)
-
-        # Select pour ouvrir le modal
-        select = discord.ui.Select(
-            placeholder="Choisissez un poste…",
-            options=[
-                discord.SelectOption(label=app, value=app)
-                for app in cfg["applications_enabled"]
-            ],
-            custom_id="apply_modal"
-        )
-        view = discord.ui.View(timeout=None)
-        view.add_item(select)
-
-        await interaction.followup.send(embed=embed, view=view, ephemeral=False)
-
-    @commands.Cog.listener()
-    async def on_interaction(self, interaction: discord.Interaction):
-        # On ne gère que les selects du menu d'apply
-        if interaction.type != discord.InteractionType.component:
-            return
-        data = interaction.data
-        if data.get("component_type") == 3 and data.get("custom_id") == "apply_modal":
-            app_name = data["values"][0]
+        async def callback(self, interaction: discord.Interaction):
+            app_name = self.values[0]
             questions = APPLICATION_QUESTIONS[app_name]
 
-            # Modal dynamique
             class AppModal(discord.ui.Modal, title=f"Candidature — {app_name}"):
-                def __init__(self):
+                def __init__(modal_self):
                     super().__init__()
                     for key, text, mx in questions:
-                        # Label = question (max 45 chars)
-                        if len(text) <= 45:
-                            label = text
-                        else:
-                            label = text[:42].rstrip() + "..."
-                        # Placeholder générique
-                        placeholder = "Votre réponse…"
-                        self.add_item(discord.ui.TextInput(
+                        label = text if len(text) <= 45 else text[:42].rstrip() + "..."
+                        modal_self.add_item(discord.ui.TextInput(
                             label=label,
                             style=discord.TextStyle.paragraph,
                             custom_id=key,
-                            placeholder=placeholder,
+                            placeholder="Votre réponse…",
                             max_length=mx
                         ))
 
-                async def callback(self, modal_inter: discord.Interaction):
-                    answers = {c.custom_id: c.value for c in self.children}
+                async def callback(modal_self, modal_inter: discord.Interaction):
+                    answers = {c.custom_id: c.value for c in modal_self.children}
                     doc = {
                         "server_id": interaction.guild.id,
                         "user_id": interaction.user.id,
@@ -96,7 +57,6 @@ class ApplyFlowCog(commands.Cog):
                     }
                     res = await apply_collection.insert_one(doc)
 
-                    # Embed de notification
                     eb = discord.Embed(
                         title=f"Nouvelle candidature — {app_name}",
                         description=f"Membre : {interaction.user.mention}",
@@ -106,7 +66,6 @@ class ApplyFlowCog(commands.Cog):
                         eb.add_field(name=k.upper(), value=v, inline=False)
                     eb.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
-                    # Boutons pour gérer la candidature
                     view = discord.ui.View(timeout=None)
                     view.add_item(discord.ui.Button(
                         label="✅ Accepter",
@@ -119,19 +78,46 @@ class ApplyFlowCog(commands.Cog):
                         custom_id=f"apply_refuse:{res.inserted_id}"
                     ))
 
-                    # Envoi dans le canal configuré
-                    cfg = await apply_collection.find_one({"server_id": interaction.guild.id})
-                    channel = interaction.guild.get_channel(cfg["channel_id"])
+                    cfg2 = await apply_collection.find_one({"server_id": interaction.guild.id})
+                    channel = interaction.guild.get_channel(cfg2["channel_id"])
                     await channel.send(embed=eb, view=view)
 
-                    # Confirmation à l’utilisateur
+                    # SEUL message ephemeral
                     await modal_inter.response.send_message(
                         "✅ Ta candidature a bien été envoyée !",
                         ephemeral=True
                     )
 
-            # Envoi du modal (ici, on ne defer pas de nouveau)
+            # Envoi du modal sans re-defer
             await interaction.response.send_modal(AppModal())
+
+class ApplyFlowCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    @app_commands.command(name="apply_send", description="Publie le menu de candidature")
+    async def apply_send(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id
+        cfg = await apply_collection.find_one({"server_id": guild_id})
+        if not cfg or not cfg.get("applications_enabled"):
+            return await interaction.response.send_message(
+                embed=discord.Embed(
+                    description=MESSAGES["NOT_CONFIGURED"],
+                    color=EMBED_COLOR
+                )
+            )
+
+        embed = discord.Embed(
+            title="📋 Menu de candidature",
+            description="Sélectionnez le poste pour lequel vous souhaitez postuler :",
+            color=EMBED_COLOR
+        )
+        for app in cfg["applications_enabled"]:
+            embed.add_field(name=app, value=EMOJIS.get(app, "📝"), inline=True)
+
+        view = ApplySendView(cfg)
+        # PUBLIC : pas d’ephemeral
+        await interaction.response.send_message(embed=embed, view=view)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ApplyFlowCog(bot))
