@@ -80,7 +80,7 @@ class TicketConfigCog(commands.Cog):
             title="🎫 Créer un ticket",
             description=(
                 "Pour créer un ticket et contacter l'administration, cliquez ci-dessous "
-                f"<:ticket:1390855520533090355>"
+                f"<:ticketcute:1390855389209427988>"
             ),
             color=EMBED_COLOR
         )
