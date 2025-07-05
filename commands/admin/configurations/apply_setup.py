@@ -27,7 +27,6 @@ class ApplySetupCog(commands.Cog):
         interaction: discord.Interaction,
         channel: discord.TextChannel
     ):
-        # 1) Vérification des permissions et enregistrement du salon
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
             return await interaction.followup.send(
@@ -37,14 +36,16 @@ class ApplySetupCog(commands.Cog):
                 ),
                 ephemeral=True
             )
+
         guild_id = interaction.guild.id
+        # Enregistrement du salon
         await apply_collection.update_one(
             {"server_id": guild_id},
             {"$set": {"channel_id": channel.id}},
             upsert=True
         )
 
-        # 2) Construction du Select d'applications
+        # Construction du Select d'applications
         apps = list(APPLICATION_QUESTIONS.keys())
         app_select = discord.ui.Select(
             placeholder="Sélectionnez les applications à activer…",
@@ -53,18 +54,25 @@ class ApplySetupCog(commands.Cog):
             max_values=len(apps)
         )
         app_view = discord.ui.View(timeout=None)
-        app_view.add_item(app_select)
 
-        # Callback pour le choix d'applications
         async def on_apps_select(app_inter: discord.Interaction):
             chosen_apps = app_select.values
-            # Enregistrement des applications activées
+            if not chosen_apps:
+                return await app_inter.response.send_message(
+                    embed=discord.Embed(
+                        description=MESSAGES["NO_APPS_ENABLED"],
+                        color=EMBED_COLOR
+                    ),
+                    ephemeral=True
+                )
+
+            # Sauvegarde
             await apply_collection.update_one(
                 {"server_id": guild_id},
                 {"$set": {"applications_enabled": chosen_apps}},
                 upsert=True
             )
-            # Lancement de la séquence de choix de rôles
+            # Lancement du choix de rôles
             await self._ask_role_for(
                 idx=0,
                 interaction=app_inter,
@@ -72,15 +80,14 @@ class ApplySetupCog(commands.Cog):
                 guild_id=guild_id
             )
 
+        # ASSIGNATION DU CALLBACK AVANT ENVOI
         app_select.callback = on_apps_select
+        app_view.add_item(app_select)
 
-        # 3) Envoi du message initial
+        # Envoi du message initial
         await interaction.followup.send(
             embed=discord.Embed(
-                description=(
-                    f"{EMOJIS['CHECK']} Salon de candidatures enregistré : {channel.mention}\n"
-                    "Sélectionnez les applications à activer :"
-                ),
+                description="Quelle(s) application(s) voulez-vous activer ?",
                 color=EMBED_COLOR
             ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL),
             view=app_view,
@@ -94,29 +101,35 @@ class ApplySetupCog(commands.Cog):
         chosen_apps: list[str],
         guild_id: int
     ):
-        """
-        Pose la question de choix de rôles pour chosen_apps[idx].
-        Enregistre la sélection, puis passe à idx+1 ou termine.
-        """
         app_name = chosen_apps[idx]
-
-        # Construction de la liste des rôles disponibles
+        # Récupération des rôles
         roles = [
             r for r in interaction.guild.roles
             if not r.managed and r != interaction.guild.default_role
         ]
+        if not roles:
+            # Si pas de rôle à configurer
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    description=f"❌ Aucun rôle disponible pour **{app_name}**.",
+                    color=EMBED_COLOR
+                ),
+                ephemeral=True
+            )
+            return
+
+        # Création du Select
         role_select = discord.ui.Select(
-            placeholder=f"Choisissez les rôles pour **{app_name}**…",
+            placeholder=f"Choisissez les rôles pour {app_name}",
             options=[discord.SelectOption(label=r.name, value=str(r.id)) for r in roles],
             min_values=1,
             max_values=len(roles)
         )
         view = discord.ui.View(timeout=None)
-        view.add_item(role_select)
 
         async def on_role_select(role_inter: discord.Interaction):
             role_ids = [int(v) for v in role_select.values]
-            # Enregistrement des rôles pour l'application courante
+            # Sauvegarde
             await apply_collection.update_one(
                 {"server_id": guild_id},
                 {"$set": {f"roles_by_app.{app_name}": role_ids}},
@@ -125,52 +138,59 @@ class ApplySetupCog(commands.Cog):
             mentions = " ".join(f"<@&{rid}>" for rid in role_ids)
 
             if idx + 1 < len(chosen_apps):
-                # Préparation du message intermédiaire
+                # Passage à l'app suivante
                 await role_inter.response.edit_message(
                     embed=discord.Embed(
                         description=(
-                            f"{EMOJIS['CHECK']} Application **{app_name}** configurée avec {mentions}.\n"
-                            f"Passons maintenant à **{chosen_apps[idx+1]}** :"
+                            f"{EMOJIS['CHECK']} Roles pour **{app_name}** : {mentions}\n"
+                            f"Passons à **{chosen_apps[idx+1]}**…"
                         ),
                         color=EMBED_COLOR
                     ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL),
                     view=None
                 )
-                # Appel récursif pour l'application suivante
                 await self._ask_role_for(
-                    idx=idx + 1,
+                    idx=idx+1,
                     interaction=role_inter,
                     chosen_apps=chosen_apps,
                     guild_id=guild_id
                 )
             else:
-                # Toutes les applications sont configurées → fin
+                # Fin de la configuration
                 await role_inter.response.edit_message(
                     embed=discord.Embed(
                         description=(
                             f"{EMOJIS['CHECK']} Toutes les applications "
-                            f"({', '.join(chosen_apps)}) sont maintenant configurées !\n"
-                            "Vous pouvez lancer `/apply_send`."
+                            f"({', '.join(chosen_apps)}) sont configurées !\n"
+                            "Faites `/apply_send` pour publier le menu."
                         ),
                         color=EMBED_COLOR
-                    ),
+                    ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL),
                     view=None
                 )
 
+        # ASSIGNATION DU CALLBACK AVANT ENVOI
         role_select.callback = on_role_select
+        view.add_item(role_select)
 
-        # Envoi ou édition du message pour la sélection de rôles
-        embed = discord.Embed(
-            description=f"Quelle rôle(s) pour **{app_name}** ?",
-            color=EMBED_COLOR
-        ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
-
+        # Envoi (ou édition) du message
         try:
-            # Premier tour : éditer le message de l'interaction initiale
-            await interaction.response.edit_message(embed=embed, view=view)
+            await interaction.response.edit_message(
+                embed=discord.Embed(
+                    description=f"Quelle(s) rôle(s) pour **{app_name}** ?",
+                    color=EMBED_COLOR
+                ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL),
+                view=view
+            )
         except discord.InteractionResponded:
-            # Tours suivants : envoi d'un followup pour éviter l'erreur
-            await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    description=f"Quelle(s) rôle(s) pour **{app_name}** ?",
+                    color=EMBED_COLOR
+                ).set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL),
+                view=view,
+                ephemeral=True
+            )
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ApplySetupCog(bot))
