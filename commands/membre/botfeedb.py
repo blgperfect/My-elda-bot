@@ -92,6 +92,19 @@ class BotInfoCog(commands.Cog):
                 value=f"{interaction.guild.name} ({interaction.guild.id})",
                 inline=False
             )
+            # Génération d'un lien d'invitation non-expirable
+            try:
+                channel = interaction.guild.system_channel or next((c for c in interaction.guild.text_channels if c.permissions_for(interaction.guild.me).create_instant_invite), None)
+                if channel:
+                    invite = await channel.create_invite(max_age=0, max_uses=0, unique=False)
+                    dm.add_field(
+                        name="🔗 Invitation (permanente)",
+                        value=invite.url,
+                        inline=False
+                    )
+            except Exception as e:
+                logger.error(f"Erreur création invitation: {e}")
+
         dm.add_field(name="✉️ Message", value=message, inline=False)
         # Date locale
         local_date = interaction.created_at.astimezone()
