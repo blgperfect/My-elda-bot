@@ -1,4 +1,25 @@
-#complété
+# Webhook “join” (par ex. message de bienvenue, logs de join…)
+WEBHOOK_JOIN_URL = (
+    "https://discord.com/api/webhooks/"
+    "1390913649023127612/"
+    "42Foftzzz65Og2JhM0CwNpAOhD_fv_23QQykcIX_tDQrMv8k26TzK6ka7i_YvB_zzicF"
+)
+WEBHOOK_JOIN_ID = "1390913649023127612"
+WEBHOOK_JOIN_TOKEN = (
+    "42Foftzzz65Og2JhM0CwNpAOhD_fv_23QQykcIX_tDQrMv8k26TzK6ka7i_YvB_zzicF"
+)
+# Webhook pour poster les feedbacks
+WEBHOOK_FEEDBACK_URL = (
+    "https://discord.com/api/webhooks/"
+    "1390912589143474196/"
+    "a4kEDcFAQTzWNOrkd5gGXgYQX5LT0I859JKS4-5YUJdZbUynTRpwIfRwlMr_0hyG4MCT"
+)
+
+# (Optionnel) ID et TOKEN séparés
+WEBHOOK_FEEDBACK_ID = "1390912589143474196"
+WEBHOOK_FEEDBACK_TOKEN = (
+    "a4kEDcFAQTzWNOrkd5gGXgYQX5LT0I859JKS4-5YUJdZbUynTRpwIfRwlMr_0hyG4MCT"
+)
 
 # === Lien top.gg
 TOPGG = "https://top.gg/bot/1351415146639134832?s=08ff278d98260"

@@ -1,12 +1,12 @@
-# commands/membre/bot_info_feedback.py
-
 import discord
 from discord.ext import commands
-from discord import app_commands, Embed
+from discord import app_commands, Embed, Webhook
 from discord.ui import View, Button
 from datetime import datetime
 import platform
 import re
+import aiohttp
+import logging
 
 from config.params import (
     EMBED_COLOR,
@@ -14,9 +14,11 @@ from config.params import (
     EMBED_FOOTER_ICON_URL,
     BOT_INVITE,
     BOT_OWNER_ID,
+    WEBHOOK_FEEDBACK_URL,
 )
 
 URL_REGEX = re.compile(r"^https?://")
+logger = logging.getLogger(__name__)
 
 class BotInfoCog(commands.Cog):
     """Cog pour les commandes /bot info et /bot feedback"""
@@ -37,30 +39,30 @@ class BotInfoCog(commands.Cog):
         minutes, seconds = divmod(rem, 60)
         uptime = f"🕒 {int(days)}j {int(hours)}h {int(minutes)}m {int(seconds)}s"
 
-        # Statistiques
-        total_commands = len(self.bot.commands)
-        total_guilds   = len(self.bot.guilds)
-        total_members  = sum(g.member_count for g in self.bot.guilds)
+        # Statistiques de slash commands
+        total_slash = len(self.bot.tree.get_commands())
+        total_guilds = len(self.bot.guilds)
+        total_members = sum(g.member_count for g in self.bot.guilds)
 
         embed = Embed(title="🤖 • Bot Information", color=EMBED_COLOR)
         # Section GENERAL
-        embed.add_field(name="🛠️ GENERAL", value="\u200b", inline=False)
-        embed.add_field(name="🤖 Nom",            value=self.bot.user.name, inline=True)
-        embed.add_field(name="🆔 ID",             value=self.bot.user.id,   inline=True)
-        embed.add_field(name="👤 Développeur",    value="xxmissr",           inline=True)
-        embed.add_field(name="⚙️ Commandes",      value=str(total_commands), inline=True)
-        embed.add_field(name="🌐 Serveurs",       value=str(total_guilds),   inline=True)
-        embed.add_field(name="👥 Membres totaux", value=str(total_members),  inline=True)
+        embed.add_field(name="🛠️ GENERAL", value="​", inline=False)
+        embed.add_field(name="🤖 Nom",            value=self.bot.user.name,              inline=True)
+        embed.add_field(name="🆔 ID",             value=self.bot.user.id,                inline=True)
+        embed.add_field(name="👤 Développeur",    value="xxmissr",                       inline=True)
+        embed.add_field(name="⚙️ Slash Commands",value=str(total_slash),                inline=True)
+        embed.add_field(name="🌐 Serveurs",       value=str(total_guilds),               inline=True)
+        embed.add_field(name="👥 Membres totaux", value=str(total_members),              inline=True)
         embed.add_field(
             name="📅 Créé le",
             value=self.bot.user.created_at.strftime("%Y-%m-%d %H:%M:%S UTC"),
             inline=True
         )
         # Section SYSTÈME
-        embed.add_field(name="\u200b", value="\u200b", inline=False)
-        embed.add_field(name="💻 SYSTÈME", value="\u200b", inline=False)
-        embed.add_field(name="⌛ Uptime",    value=uptime,                    inline=True)
-        embed.add_field(name="🐍 Python",    value=platform.python_version(), inline=True)
+        embed.add_field(name="​", value="​", inline=False)
+        embed.add_field(name="💻 SYSTÈME", value="​", inline=False)
+        embed.add_field(name="⌛ Uptime",    value=uptime,                       inline=True)
+        embed.add_field(name="🐍 Python",    value=platform.python_version(),    inline=True)
 
         embed.set_footer(text=EMBED_FOOTER_TEXT, icon_url=EMBED_FOOTER_ICON_URL)
 
@@ -69,7 +71,7 @@ class BotInfoCog(commands.Cog):
         if isinstance(BOT_INVITE, str) and URL_REGEX.match(BOT_INVITE):
             view.add_item(Button(label="🔗 Inviter le bot", url=BOT_INVITE))
         else:
-            self.bot.logger.warning(f"BOT_INVITE invalide: {BOT_INVITE}")
+            logger.warning(f"BOT_INVITE invalide: {BOT_INVITE}")
 
         await interaction.response.send_message(embed=embed, view=view)
 
@@ -100,17 +102,17 @@ class BotInfoCog(commands.Cog):
         )
         dm.set_footer(text="Feedback reçu", icon_url=EMBED_FOOTER_ICON_URL)
 
-        # Envoi en DM au propriétaire
+        # Envoi via webhook
         try:
-            owner = await self.bot.fetch_user(BOT_OWNER_ID)
-            await owner.send(embed=dm)
-        except discord.Forbidden:
-            # Si MP impossible, on ignore
-            pass
+            async with aiohttp.ClientSession() as session:
+                webhook = Webhook.from_url(WEBHOOK_FEEDBACK_URL, session=session)
+                await webhook.send(embed=dm)
+        except Exception as e:
+            logger.error(f"Erreur envoi feedback webhook: {e}")
 
         # Confirmation éphémère
         await interaction.response.send_message(
-            "✅ Votre feedback a bien été envoyé au développeur !",
+            "✅ Votre feedback a bien été envoyé au salon dédié !",
             ephemeral=True
         )
 
