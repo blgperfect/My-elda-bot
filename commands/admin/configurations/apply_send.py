@@ -26,7 +26,7 @@ class AdminActionView(discord.ui.View):
         self.cfg = cfg
 
     @discord.ui.button(label="Accepter", style=discord.ButtonStyle.success)
-    async def accept(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Récupérer le mapping roles depuis la config en base si présent
         roles_map = self.cfg.get("application_roles", {})
         role_id = roles_map.get(self.app_name)
@@ -49,7 +49,7 @@ class AdminActionView(discord.ui.View):
             )
 
     @discord.ui.button(label="Refuser", style=discord.ButtonStyle.danger)
-    async def reject(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
         dm_message = (
             f"Désolé {self.member.name}, vous avez été refusé pour le poste **{self.app_name}** "
             f"sur le serveur **{interaction.guild.name}**."
@@ -127,8 +127,8 @@ class ApplySendView(discord.ui.View):
                     "answers": answers,
                     "status": "pending",
                     "timestamp": discord.utils.utcnow(),
-                    # stocker aussi le mapping roles si besoin
-                    "application_roles": modal_inter.client.get_cog("ApplyFlowCog").cfg.get("application_roles", {})
+                    # stocker le mapping roles utile pour AdminActionView
+                    "application_roles": modal_self.questions and modal_self.questions and interaction.client.get_cog("ApplyFlowCog").cfg.get("application_roles", {})
                 }
                 await apply_collection.insert_one(doc)
 
@@ -169,7 +169,6 @@ class ApplySendView(discord.ui.View):
 class ApplyFlowCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # Charger le mapping rôle depuis la config de l'application si stocké en DB
         self.cfg = {}
 
     @app_commands.command(
